@@ -402,3 +402,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
 .imp-check { display: flex; align-items: center; gap: 10px; font-size: 15px; }
 .imp-check input { width: 22px; height: 22px; accent-color: var(--accent); }
 .primary:disabled { opacity: .4; }
+#modal-textarea { width: 100%; min-height: 120px; margin-top: 4px; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); outline: none; font-size: 16px; line-height: 1.4; resize: vertical; }
+#modal-textarea:focus { border-color: var(--accent); }
+#fb-owner { display: flex; flex-direction: column; gap: 10px; }
+#fb-owner:not(.hidden) { display: flex; }
+.fb-item { align-items: flex-start !important; }
+.fb-meta { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.fb-msg { white-space: pre-wrap; font-size: 15px; line-height: 1.4; }

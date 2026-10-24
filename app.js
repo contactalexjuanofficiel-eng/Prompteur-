@@ -86,7 +86,9 @@ function toast(msg, ms = 2200) {
 let modalResolve = null;
 function modal({ title, message = '', icon = null, danger = false, input = null, buttons }) {
   if (modalResolve) modalResolve(null);
-  const el = $('#modal'), inp = $('#modal-input'), acts = $('#modal-actions');
+  const el = $('#modal'), acts = $('#modal-actions');
+  $('#modal-input').classList.add('hidden'); $('#modal-textarea').classList.add('hidden');
+  const inp = input && input.multiline ? $('#modal-textarea') : $('#modal-input');
   const ico = $('#modal-icon');
   ico.classList.toggle('hidden', !icon);
   ico.classList.toggle('danger', danger);
@@ -97,7 +99,7 @@ function modal({ title, message = '', icon = null, danger = false, input = null,
   $('#modal-msg').classList.toggle('long', message.includes('\n'));
   inp.classList.toggle('hidden', !input);
   if (input) {
-    inp.type = input.type || 'text';
+    if (!input.multiline) inp.type = input.type || 'text';
     inp.value = input.value || '';
     inp.placeholder = input.placeholder || '';
   }
@@ -124,7 +126,7 @@ function modal({ title, message = '', icon = null, danger = false, input = null,
       acts.appendChild(btn);
     }
     el.classList.remove('hidden');
-    if (input) setTimeout(() => { inp.focus(); inp.select(); }, 30);
+    if (input) setTimeout(() => { inp.focus(); if (!input.multiline) inp.select(); }, 30);
   });
 }
 $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal' && modalResolve) modalResolve(null); });
@@ -1340,7 +1342,7 @@ async function selectTeam(id) {
 $('#btn-account').onclick = () => openAccount();
 async function openAccount() {
   renderAccount(); show('v-account');
-  if (session) { await loadTeams(); await loadMembers(); renderAccount(); }
+  if (session) { await loadTeams(); await loadMembers(); renderAccount(); loadFeedback(); }
 }
 
 function renderAccount() {
@@ -2028,6 +2030,71 @@ function stageChecklist() {
 }
 $('#s-stage').onclick = () => stageChecklist();
 $('#help-stage').onclick = () => stageChecklist();
+
+/* --- retours des testeurs --- */
+const APP_VERSION = 'v20';
+function deviceLabel(ua) {
+  const ios = ua.match(/OS (\d+)_(\d+)/);
+  if (/iPhone/.test(ua)) return 'iPhone' + (ios ? ` iOS ${ios[1]}.${ios[2]}` : '');
+  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && /Mobile/.test(ua))) return 'iPad' + (ios ? ` iOS ${ios[1]}.${ios[2]}` : '');
+  const and = ua.match(/Android (\d+)/); if (and) return 'Android ' + and[1];
+  if (/Macintosh/.test(ua)) return 'Mac';
+  if (/Windows/.test(ua)) return 'Windows';
+  return 'Autre appareil';
+}
+async function sendFeedback() {
+  if (!sb) return toast('Envoi impossible : sauvegarde en ligne non configurée');
+  const msg = await promptModal('Un souci ou une idée ?', 'Décris ce qui s\'est passé ou ce que tu aimerais. Ton modèle de téléphone est ajouté automatiquement pour aider à corriger.',
+    'Envoyer', { multiline: true, placeholder: 'Ex : quand j\'appuie sur Suivant depuis la télécommande, rien ne se passe…', icon: 'message', min: 3, minMsg: 'Écris quelques mots' });
+  if (!msg) return;
+  if (!navigator.onLine) return toast('Pas de connexion : réessaie quand tu as du réseau');
+  const t = team.current();
+  const { error } = await sb.from('prompteur_retours').insert({
+    message: msg.slice(0, 4000), email: session ? session.user.email : '', appareil: navigator.userAgent.slice(0, 400),
+    contexte: { version: APP_VERSION, installee: isInstalled, equipe: t ? t.nom : null, role: t ? t.role : null,
+      ecran: `${window.innerWidth}x${window.innerHeight}`, prompteur_ouvert: P.open }
+  });
+  if (error) return toast('Envoi impossible : ' + frErr(error));
+  modal({ title: 'Merci !', icon: 'check', message: 'Ton message a bien été envoyé.', buttons: [{ label: 'OK', value: true }] });
+}
+$('#help-feedback').onclick = sendFeedback;
+$('#acc-feedback').onclick = sendFeedback;
+
+// Le propriétaire de l'appli voit les retours dans Compte et équipe.
+let fbTab = 'new', fbOwner = false;
+async function loadFeedback() {
+  if (!sb || !session) { $('#fb-owner').classList.add('hidden'); return; }
+  const own = await sb.from('prompteur_proprietaires').select('user_id').eq('user_id', session.user.id);
+  fbOwner = !own.error && own.data && own.data.length > 0;
+  $('#fb-owner').classList.toggle('hidden', !fbOwner);
+  if (!fbOwner) return;
+  const { data, error } = await sb.from('prompteur_retours').select('*').order('created_at', { ascending: false }).limit(200);
+  if (error) return;
+  const todo = data.filter(r => !r.traite);
+  $('#fb-count').textContent = todo.length ? todo.length : '';
+  $('#fb-count').classList.toggle('hidden', !todo.length);
+  const rows = data.filter(r => fbTab === 'new' ? !r.traite : r.traite);
+  const ul = $('#fb-list'); ul.innerHTML = '';
+  if (!rows.length) ul.innerHTML = `<p class="empty">${fbTab === 'new' ? 'Aucun retour à traiter.' : 'Aucun retour traité.'}</p>`;
+  for (const r of rows) {
+    const li = document.createElement('li');
+    li.className = 'fb-item';
+    li.innerHTML = `<div class="li-main"><div class="fb-meta"></div><div class="fb-msg"></div></div>
+      <button class="li-small" aria-label="${r.traite ? 'Remettre à traiter' : 'Marquer comme traité'}">${ic(r.traite ? 'refresh' : 'check')}</button>`;
+    const quand = new Date(r.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+    li.querySelector('.fb-meta').textContent = `${quand} · ${r.email || 'anonyme'} · ${deviceLabel(r.appareil || '')}` + (r.contexte && r.contexte.version ? ` · ${r.contexte.version}` : '');
+    li.querySelector('.fb-msg').textContent = r.message;
+    li.querySelector('button').onclick = async () => {
+      const { error: e2 } = await sb.from('prompteur_retours').update({ traite: !r.traite }).eq('id', r.id);
+      if (e2) return toast(frErr(e2));
+      loadFeedback();
+    };
+    ul.appendChild(li);
+  }
+}
+$$('#fb-tabs button').forEach(b => b.onclick = () => {
+  fbTab = b.dataset.v; $$('#fb-tabs button').forEach(x => x.classList.toggle('on', x === b)); loadFeedback();
+});
 
 // Première ouverture : on propose la notice (sauf si on arrive par un lien d'invitation).
 if (!store.get('pr_notice_vu', false)) {

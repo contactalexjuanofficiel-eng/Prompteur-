@@ -143,3 +143,27 @@ begin
 end $$;
 create trigger prompteur_textes_archiver before update on public.prompteur_textes
   for each row execute function prompteur_prive.archiver_texte();
+
+-- Retours des testeurs : tout le monde peut en envoyer, seul le propriétaire de l'appli les lit.
+create table public.prompteur_proprietaires (user_id uuid primary key references auth.users(id) on delete cascade);
+alter table public.prompteur_proprietaires enable row level security;
+create function prompteur_prive.est_proprietaire() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.prompteur_proprietaires p where p.user_id = (select auth.uid()));
+$$;
+grant execute on function prompteur_prive.est_proprietaire() to anon, authenticated;
+grant usage on schema prompteur_prive to anon;
+create policy "proprietaires_select" on public.prompteur_proprietaires for select to authenticated using (user_id = (select auth.uid()));
+create table public.prompteur_retours (
+  id bigint generated always as identity primary key,
+  user_id uuid default auth.uid() references auth.users(id) on delete set null,
+  email text not null default '', message text not null check (char_length(message) between 1 and 4000),
+  appareil text not null default '', contexte jsonb not null default '{}'::jsonb,
+  traite boolean not null default false, created_at timestamptz not null default now()
+);
+create index prompteur_retours_date_idx on public.prompteur_retours(created_at desc);
+alter table public.prompteur_retours enable row level security;
+create policy "retours_insert" on public.prompteur_retours for insert to anon, authenticated with check (user_id is null or user_id = (select auth.uid()));
+create policy "retours_select" on public.prompteur_retours for select to authenticated using (prompteur_prive.est_proprietaire());
+create policy "retours_update" on public.prompteur_retours for update to authenticated using (prompteur_prive.est_proprietaire()) with check (prompteur_prive.est_proprietaire());
+-- puis : insert into public.prompteur_proprietaires (user_id) select id from auth.users where email = '<email du propriétaire>';

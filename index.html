@@ -48,6 +48,7 @@
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6"/></symbol>
     <symbol id="i-sections" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14.5h4"/></symbol>
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
   </defs>
@@ -257,6 +258,12 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
         <button class="link-btn danger hidden" id="team-leave">Quitter cette équipe</button>
       </div>
 
+      <div id="fb-owner" class="hidden">
+        <h3>Retours des testeurs <span class="badge admin" id="fb-count"></span></h3>
+        <div class="seg" id="fb-tabs"><button data-v="new" class="on">À traiter</button><button data-v="done">Traités</button></div>
+        <ul class="list flat-list" id="fb-list"></ul>
+      </div>
+
       <button class="secondary" id="acc-sync"><svg class="ic"><use href="#i-refresh"/></svg>Synchroniser maintenant</button>
       <button class="secondary" id="acc-logout"><svg class="ic"><use href="#i-logout"/></svg>Se déconnecter</button>
     </div>
@@ -265,6 +272,8 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
     <h3>Sauvegarde</h3>
     <button class="secondary" id="acc-export">Exporter les textes (fichier)</button>
     <label class="secondary file-btn block" id="acc-import-btn">Importer une sauvegarde<input type="file" id="acc-importfile" accept=".json,application/json"></label>
+    <hr>
+    <button class="secondary" id="acc-feedback"><svg class="ic"><use href="#i-message"/></svg>Signaler un souci ou proposer une idée</button>
     <hr>
     <h3>Installer sur iPhone / iPad</h3>
     <p class="muted">Dans Safari : bouton <b>Partager</b> <svg class="ic inline"><use href="#i-share"/></svg> puis <b>« Sur l'écran d'accueil »</b>. L'appli s'ouvre alors en plein écran et fonctionne même sans réseau.</p>
@@ -384,6 +393,7 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
     </details>
 
     <button class="secondary" id="help-example"><svg class="ic"><use href="#i-play"/></svg>Essayer avec un texte d'exemple</button>
+    <button class="secondary" id="help-feedback"><svg class="ic"><use href="#i-message"/></svg>Signaler un souci ou proposer une idée</button>
   </div>
 </section>
 
@@ -553,6 +563,7 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
     <h3 id="modal-title"></h3>
     <p id="modal-msg"></p>
     <input id="modal-input" class="hidden" autocomplete="off">
+    <textarea id="modal-textarea" class="hidden" rows="5"></textarea>
     <div class="modal-actions" id="modal-actions"></div>
   </div>
 </div>
