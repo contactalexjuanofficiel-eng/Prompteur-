@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Prompteur</title>
+  <meta name="description" content="Prompteur pour concerts, mariages et lives — iPhone, iPad et ordinateur.">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Prompteur">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- ============ BIBLIOTHÈQUE ============ -->
+<section id="v-home" class="view">
+  <header class="topbar">
+    <h1>Prompteur</h1>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btn-remote" title="Télécommande" aria-label="Télécommande">📡</button>
+      <button class="icon-btn" id="btn-account" title="Compte" aria-label="Compte">👤</button>
+    </div>
+  </header>
+
+  <div id="sync-banner" class="sync-banner hidden"></div>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="textes">Textes</button>
+    <button class="tab" data-tab="setlists">Setlists</button>
+  </nav>
+
+  <div class="tab-panel" id="tab-textes">
+    <div class="searchrow">
+      <input type="search" id="search" placeholder="Rechercher un texte…" autocomplete="off">
+    </div>
+    <ul class="list" id="list-textes"></ul>
+    <p class="empty hidden" id="empty-textes">Aucun texte pour l'instant.<br>Appuie sur <b>+</b> pour ajouter ta première chanson ou ton discours.</p>
+  </div>
+
+  <div class="tab-panel hidden" id="tab-setlists">
+    <ul class="list" id="list-setlists"></ul>
+    <p class="empty hidden" id="empty-setlists">Aucune setlist.<br>Crée une setlist pour enchaîner tes morceaux pendant un concert ou un mariage.</p>
+  </div>
+
+  <button class="fab" id="fab" aria-label="Ajouter">+</button>
+</section>
+
+<!-- ============ ÉDITEUR DE TEXTE ============ -->
+<section id="v-edit" class="view hidden">
+  <header class="topbar">
+    <button class="link-btn" data-back>‹ Retour</button>
+    <div class="topbar-actions">
+      <button class="link-btn danger" id="edit-delete">Supprimer</button>
+    </div>
+  </header>
+  <div class="edit-body">
+    <input type="text" id="edit-titre" class="title-input" placeholder="Titre (ex : Perfect – Ed Sheeran)">
+    <textarea id="edit-contenu" placeholder="Colle ou écris ton texte ici…
+
+Astuces :
+# Refrain        → titre de section (en couleur)
+[Guitare seule]  → indication de scène (en couleur)
+Ligne vide       → espace"></textarea>
+    <div class="edit-tools">
+      <label class="file-btn">Importer .txt<input type="file" id="edit-import" accept=".txt,text/plain"></label>
+      <span class="muted" id="edit-stats"></span>
+    </div>
+  </div>
+  <div class="bottombar">
+    <button class="primary big" id="edit-play">▶ Lancer le prompteur</button>
+  </div>
+</section>
+
+<!-- ============ ÉDITEUR DE SETLIST ============ -->
+<section id="v-setlist" class="view hidden">
+  <header class="topbar">
+    <button class="link-btn" data-back>‹ Retour</button>
+    <div class="topbar-actions">
+      <button class="link-btn danger" id="sl-delete">Supprimer</button>
+    </div>
+  </header>
+  <div class="edit-body">
+    <input type="text" id="sl-nom" class="title-input" placeholder="Nom (ex : Mariage Julie & Tom)">
+    <ol class="list setlist-items" id="sl-items"></ol>
+    <p class="empty hidden" id="sl-empty">Ajoute des textes à cette setlist.</p>
+    <button class="secondary" id="sl-add">+ Ajouter des textes</button>
+  </div>
+  <div class="bottombar">
+    <button class="primary big" id="sl-play">▶ Lancer la setlist</button>
+  </div>
+</section>
+
+<!-- ============ SÉLECTEUR DE TEXTES ============ -->
+<div id="picker" class="sheet hidden">
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <b>Ajouter à la setlist</b>
+      <button class="link-btn" id="picker-done">OK</button>
+    </div>
+    <ul class="list" id="picker-list"></ul>
+  </div>
+</div>
+
+<!-- ============ COMPTE ============ -->
+<section id="v-account" class="view hidden">
+  <header class="topbar">
+    <button class="link-btn" data-back>‹ Retour</button>
+    <h2>Compte</h2>
+    <span></span>
+  </header>
+  <div class="edit-body">
+    <div id="acc-out">
+      <p class="muted">Connecte-toi pour sauvegarder tes textes dans le cloud et les retrouver sur tous tes appareils (iPhone, iPad, ordinateur). Sans compte, tout reste enregistré sur cet appareil.</p>
+      <input type="email" id="acc-email" placeholder="Email" autocomplete="email" autocapitalize="off">
+      <input type="password" id="acc-pass" placeholder="Mot de passe (6 caractères min.)" autocomplete="current-password">
+      <button class="primary" id="acc-login">Se connecter</button>
+      <button class="secondary" id="acc-signup">Créer un compte</button>
+      <button class="link-btn" id="acc-reset">Mot de passe oublié ?</button>
+    </div>
+    <div id="acc-in" class="hidden">
+      <p>Connecté : <b id="acc-who"></b></p>
+      <p class="muted" id="acc-last"></p>
+      <button class="primary" id="acc-sync">Synchroniser maintenant</button>
+      <button class="secondary" id="acc-logout">Se déconnecter</button>
+    </div>
+    <p class="msg" id="acc-msg"></p>
+    <hr>
+    <h3>Sauvegarde</h3>
+    <button class="secondary" id="acc-export">Exporter tout (fichier)</button>
+    <label class="secondary file-btn block">Importer une sauvegarde<input type="file" id="acc-importfile" accept=".json,application/json"></label>
+    <hr>
+    <h3>Installer sur iPhone / iPad</h3>
+    <p class="muted">Dans Safari : bouton <b>Partager</b> ⬆︎ puis <b>« Sur l'écran d'accueil »</b>. L'appli s'ouvre alors en plein écran et fonctionne même sans réseau.</p>
+  </div>
+</section>
+
+<!-- ============ TÉLÉCOMMANDE ============ -->
+<section id="v-remote" class="view hidden">
+  <header class="topbar">
+    <button class="link-btn" data-back>‹ Retour</button>
+    <h2>Télécommande</h2>
+    <span></span>
+  </header>
+  <div class="edit-body" id="rc-connect">
+    <p class="muted">Sur l'appareil qui affiche le prompteur, ouvre les réglages ⚙︎ pour voir son <b>code</b>. Entre-le ici pour piloter le défilement depuis ce téléphone.</p>
+    <input type="text" id="rc-code" class="code-input" maxlength="6" placeholder="CODE" autocapitalize="characters" autocomplete="off">
+    <button class="primary" id="rc-join">Connecter</button>
+  </div>
+  <div class="rc-pad hidden" id="rc-pad">
+    <div class="rc-status">
+      <div class="rc-title" id="rc-title">En attente du prompteur…</div>
+      <div class="rc-sub" id="rc-sub"></div>
+      <div class="progress"><div id="rc-prog"></div></div>
+    </div>
+    <button class="rc-play" id="rc-play">▶</button>
+    <div class="rc-row">
+      <button data-rc="speed-">Vitesse −</button>
+      <div class="rc-speed" id="rc-speed">–</div>
+      <button data-rc="speed+">Vitesse +</button>
+    </div>
+    <div class="rc-row">
+      <button data-rc="back">⏪ Reculer</button>
+      <button data-rc="fwd">Avancer ⏩</button>
+    </div>
+    <div class="rc-row">
+      <button data-rc="prev">⏮ Précédent</button>
+      <button data-rc="top">⤒ Début</button>
+      <button data-rc="next">Suivant ⏭</button>
+    </div>
+    <ol class="list rc-songs" id="rc-songs"></ol>
+    <button class="link-btn" id="rc-leave">Déconnecter</button>
+  </div>
+</section>
+
+<!-- ============ PROMPTEUR ============ -->
+<section id="v-prompter" class="view prompter hidden">
+  <div id="p-scroll" class="p-scroll">
+    <div id="p-text" class="p-text"></div>
+  </div>
+  <div id="p-guide" class="p-guide"></div>
+  <div id="p-count" class="p-count hidden"></div>
+  <div id="p-endcard" class="p-endcard hidden">
+    <div id="p-endtitle"></div>
+    <button class="primary big" id="p-endnext">Suivant ▶</button>
+  </div>
+
+  <div id="p-ui" class="p-ui">
+    <div class="p-top">
+      <button class="p-btn" id="p-close" aria-label="Fermer">✕</button>
+      <div class="p-info">
+        <div id="p-title"></div>
+        <div id="p-meta"></div>
+      </div>
+      <button class="p-btn" id="p-settings-btn" aria-label="Réglages">⚙︎</button>
+    </div>
+    <div class="p-bottom">
+      <div class="progress"><div id="p-prog"></div></div>
+      <div class="p-controls">
+        <button class="p-btn" id="p-prev" aria-label="Précédent">⏮</button>
+        <button class="p-btn" id="p-slower" aria-label="Moins vite">−</button>
+        <button class="p-btn p-main" id="p-play" aria-label="Lecture">▶</button>
+        <button class="p-btn" id="p-faster" aria-label="Plus vite">+</button>
+        <button class="p-btn" id="p-next" aria-label="Suivant">⏭</button>
+      </div>
+      <div class="p-speedlabel">Vitesse <b id="p-speed"></b></div>
+    </div>
+  </div>
+
+  <div id="p-settings" class="sheet hidden">
+    <div class="sheet-card dark">
+      <div class="sheet-head">
+        <b>Réglages</b>
+        <button class="link-btn" id="p-settings-done">OK</button>
+      </div>
+      <div class="settings">
+        <label>Taille du texte <span id="s-font-v"></span><input type="range" id="s-font" min="24" max="160" step="2"></label>
+        <label>Vitesse <span id="s-speed-v"></span><input type="range" id="s-speed" min="1" max="60" step="1"></label>
+        <label>Interligne <span id="s-lh-v"></span><input type="range" id="s-lh" min="1" max="2.2" step="0.05"></label>
+        <label>Marges <span id="s-margin-v"></span><input type="range" id="s-margin" min="0" max="30" step="1"></label>
+        <label>Ligne de lecture <span id="s-guide-v"></span><input type="range" id="s-guide" min="10" max="60" step="1"></label>
+        <label>Compte à rebours <span id="s-count-v"></span><input type="range" id="s-count" min="0" max="10" step="1"></label>
+        <div class="seg" id="s-align">
+          <button data-v="left">Gauche</button><button data-v="center">Centré</button>
+        </div>
+        <div class="seg" id="s-theme">
+          <button data-v="dark">Blanc/noir</button><button data-v="yellow">Jaune</button><button data-v="light">Noir/blanc</button>
+        </div>
+        <label class="check"><input type="checkbox" id="s-mirror"> Miroir horizontal (vitre de prompteur)</label>
+        <label class="check"><input type="checkbox" id="s-flip"> Retourner (tête en bas)</label>
+        <label class="check"><input type="checkbox" id="s-upper"> MAJUSCULES</label>
+        <label class="check"><input type="checkbox" id="s-showguide"> Afficher la ligne de lecture</label>
+        <label class="check"><input type="checkbox" id="s-autonext"> Enchaîner automatiquement (setlist)</label>
+        <div class="remote-code">
+          <div class="muted">Code télécommande</div>
+          <div class="code" id="s-code"></div>
+          <div class="muted small" id="s-remote-status">Ouvre 📡 Télécommande sur un autre téléphone.</div>
+        </div>
+        <p class="muted small">Clavier / pédale Bluetooth : Espace = lecture/pause · ↓ / Page suivante = avancer · ↑ / Page précédente = reculer · → / ← = morceau suivant / précédent · + / − = vitesse</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="vendor/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
