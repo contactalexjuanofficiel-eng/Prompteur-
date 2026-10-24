@@ -18,6 +18,10 @@ C'est une appli web installable (PWA) : on l'ajoute à l'écran d'accueil et ell
 - Compte (email + mot de passe) : textes de l'équipe synchronisés entre tous les appareils via Supabase
 - Export / import d'une sauvegarde, import de fichiers .txt
 
+## Mode d'emploi
+
+Une notice complète est intégrée à l'appli (bouton « ? » sur l'accueil) et proposée à la première ouverture.
+
 ## Installer sur iPhone / iPad
 
 1. Ouvre l'adresse de l'appli dans **Safari**.

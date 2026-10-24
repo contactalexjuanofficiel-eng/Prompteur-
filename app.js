@@ -1423,6 +1423,46 @@ Et voilà, c'est à toi !
 renderHome();
 renderAccount();
 
+/* ================= MODE D'EMPLOI ================= */
+const DEMO_ID = 'demo-mode-emploi';
+$('#btn-help').onclick = () => show('v-help');
+$('#help-example').onclick = () => {
+  // texte d'essai gardé hors des listes et jamais synchronisé
+  db.textes[DEMO_ID] = {
+    id: DEMO_ID, equipe_id: '__demo__', titre: 'Essai du prompteur', reglages: {}, supprime: false,
+    created_at: nowIso(), updated_at: nowIso(),
+    contenu: `# Essai
+Touche l'écran pour mettre en pause,
+touche encore pour reprendre.
+
+Glisse le doigt vers le haut ou le bas
+pour avancer ou reculer.
+
+# Vitesse
+Utilise les boutons moins et plus
+en bas de l'écran.
+[Les réglages sont en haut à droite]
+
+# Refrain
+Tu es prêt pour la scène.
+[Fin de l'essai]`
+  };
+  startPrompter([DEMO_ID], 0);
+  setTimeout(play, 150);
+};
+// Première ouverture : on propose la notice (sauf si on arrive par un lien d'invitation).
+if (!store.get('pr_notice_vu', false)) {
+  store.set('pr_notice_vu', true);
+  setTimeout(() => {
+    if (store.get('pr_invite', null) || modalResolve) return;
+    modal({
+      title: 'Bienvenue sur Prompteur', icon: 'help',
+      message: 'Ton texte défile tout seul pendant que tu chantes ou que tu parles. Jette un œil au mode d\'emploi pour démarrer en 2 minutes.',
+      buttons: [{ label: 'Lire le mode d\'emploi', value: true }, { label: 'Plus tard', value: false, style: 'ghost' }]
+    }).then(v => { if (v) show('v-help'); });
+  }, 700);
+}
+
 // Demande à l'appareil de ne jamais effacer les données de l'appli (session, textes hors ligne).
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
 
