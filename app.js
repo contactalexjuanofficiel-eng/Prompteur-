@@ -467,8 +467,6 @@ function startPrompter(ids, i) {
   loadSong(i);
   showUi();
   requestWake();
-  clearInterval(P.beat);
-  P.beat = setInterval(() => sendState(true), 2000);
   // L'affichage peut changer de taille une fois la vue affichée (barres iOS)
   setTimeout(applyStyle, 60);
 }
@@ -476,7 +474,6 @@ function startPrompter(ids, i) {
 function closePrompter() {
   pause();
   P.open = false;
-  clearInterval(P.beat);
   releaseWake();
   untrackPresence();
   sendState(true);
@@ -632,12 +629,29 @@ async function requestWake() {
   try { if ('wakeLock' in navigator) P.wake = await navigator.wakeLock.request('screen'); } catch {}
 }
 function releaseWake() { try { P.wake && P.wake.release(); } catch {} P.wake = null; }
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
+// Quand l'appli passe en arrière-plan, l'iPhone coupe sa connexion sans toujours prévenir.
+// Au retour, on recrée donc la connexion à l'équipe dès que l'appli est restée cachée quelques secondes.
+let hiddenAt = 0;
+async function onAppBack() {
   if (P.open) requestWake();
   scheduleSync(500);
-  if (session) { if (TC.ch && !teamChannelOk()) connectTeam(true); else connectTeam(); }
+  if (!session || !sb) return;
+  const away = hiddenAt ? Date.now() - hiddenAt : 0;
+  hiddenAt = 0;
+  if (away > 3000 || (TC.ch && !teamChannelOk())) {
+    try {
+      const { data } = await sb.auth.getSession();          // renouvelle le jeton s'il a expiré
+      if (data && data.session) { session = data.session; sb.realtime.setAuth(data.session.access_token); }
+    } catch {}
+    try { sb.realtime.disconnect(); } catch {}            // la connexion d'avant est souvent morte
+    connectTeam(true);
+  } else connectTeam();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  onAppBack();
 });
+window.addEventListener('pageshow', (e) => { if (e.persisted) onAppBack(); });
 
 /* --- réglages --- */
 const sliders = { font: 's-font', speed: 's-speed', lh: 's-lh', margin: 's-margin', guide: 's-guide', count: 's-count' };
@@ -1120,19 +1134,9 @@ function connectTeam(force) {
   disconnectTeam();
   TC.teamId = team.id;
   const ch = sb.channel('prompteur:' + team.id, {
-    config: { private: true, broadcast: { self: false }, presence: { key: prefs.deviceId } }
+    config: { private: true, broadcast: { self: false } }
   });
   TC.ch = ch;
-  ch.on('presence', { event: 'sync' }, () => {
-    const st = ch.presenceState();
-    TC.devices = {};
-    for (const [key, metas] of Object.entries(st)) {
-      if (key === prefs.deviceId || !metas.length) continue;
-      const m = metas[metas.length - 1];
-      if (m.appareil) TC.devices[key] = m;
-    }
-    renderRemote();
-  });
   ch.on('broadcast', { event: 'cmd' }, ({ payload }) => {
     if (payload && payload.to === prefs.deviceId) remoteCommand(payload);
   });
@@ -1150,8 +1154,8 @@ function connectTeam(force) {
     if (ch !== TC.ch) return;
     TC.ready = status === 'SUBSCRIBED';
     if (TC.ready) {
-      TC.retry = 0; lastTracked = '';
-      trackPresence();
+      TC.retry = 0;
+      sendState();
       ping(RC.target || null);
     }
     if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -1168,7 +1172,7 @@ function connectTeam(force) {
 function teamChannelOk() { return !!TC.ch && TC.ready && TC.ch.state === 'joined'; }
 function disconnectTeam() {
   const ch = TC.ch;
-  TC.ch = null; TC.ready = false; TC.teamId = null; TC.devices = {};
+  TC.ch = null; TC.ready = false; TC.teamId = null;
   clearTimeout(TC.retryTimer); TC.retryTimer = 0;
   if (ch) { try { sb.removeChannel(ch); } catch {} }
 }
@@ -1206,26 +1210,17 @@ async function remoteCommand(c) {
   sendState(true);
 }
 
-// Chaque appareil connecté s'annonce à l'équipe (prompteur ouvert ou non) :
-// il apparaît dans la télécommande et peut recevoir un texte à lancer.
-// La présence ne contient que des infos qui changent rarement (nom, prompteur ouvert) et
-// n'est renvoyée qu'en cas de changement, au plus toutes les 3 s : Supabase coupe sinon
-// l'appareil (limite de débit). Le titre et la lecture passent par les messages « state ».
-let trackTimer = 0, lastTracked = '', lastTrackAt = 0;
-function trackPresence() {
-  if (!TC.ready) return;
-  clearTimeout(trackTimer);
-  const wait = Math.max(200, 3000 - (Date.now() - lastTrackAt));
-  trackTimer = setTimeout(() => {
-    if (!teamChannelOk()) return;
-    const meta = { appareil: true, nom: prefs.deviceName, prompteur: P.open };
-    const key = JSON.stringify(meta);
-    if (key === lastTracked) return;
-    lastTracked = key; lastTrackAt = Date.now();
-    TC.ch.track(meta);
-  }, wait);
+// Chaque appareil connecté s'annonce à l'équipe par un message « state » régulier (toutes les
+// 2,5 s, et à chaque changement) : il apparaît dans la télécommande et peut recevoir un texte.
+// On n'utilise pas la « présence » Supabase, trop limitée en débit : elle coupait l'appareil.
+const ONLINE_MS = 9000;
+function trackPresence() { sendState(); }
+function untrackPresence() { sendState(); }
+setInterval(() => sendState(), 2500);
+function liveDevices() {
+  const now = Date.now();
+  return Object.entries(RC.states).filter(([k, st]) => k !== prefs.deviceId && now - st.at < ONLINE_MS);
 }
-function untrackPresence() { trackPresence(); }
 
 // État envoyé aux télécommandes : au plus un message toutes les 250 ms (le dernier part toujours).
 let lastStateSend = 0, stateTimer = 0;
@@ -1301,7 +1296,7 @@ function renderLibrary() {
     li.querySelector('.li-sub').textContent = x.sub || '';
     li.onclick = () => {
       rcSend('open', { ids: x.ids, i: 0 });
-      const d = TC.devices[RC.target] || {};
+      const d = RC.states[RC.target] || {};
       toast(`Lancement sur ${d.nom || 'l\'appareil'}…`);
     };
     ul.appendChild(li);
@@ -1321,7 +1316,7 @@ function renderRemote() {
     return;
   }
   // une coupure passagère ne fait pas perdre l'appareil choisi : on affiche « reconnexion »
-  const lost = RC.target && (!teamChannelOk() || (!TC.devices[RC.target] && Date.now() - RC.lastSeen > 8000));
+  const lost = RC.target && (!teamChannelOk() || Date.now() - RC.lastSeen > ONLINE_MS);
   if (!RC.target) {
     $('#rc-pad').classList.add('hidden'); $('#rc-list-view').classList.remove('hidden');
     $('#rc-intro').textContent = TC.ready
@@ -1329,15 +1324,13 @@ function renderRemote() {
       : 'Connexion à l\'équipe…';
     const ul = $('#rc-devices'); ul.innerHTML = '';
     // les prompteurs ouverts d'abord
-    const entries = Object.entries(TC.devices).sort((a, b) => (b[1].prompteur ? 1 : 0) - (a[1].prompteur ? 1 : 0));
+    const entries = liveDevices().sort((a, b) => (b[1].open ? 1 : 0) - (a[1].open ? 1 : 0));
     for (const [key, d] of entries) {
       const li = document.createElement('li');
-      li.innerHTML = `${ic('screen')}<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div><span class="dot ${d.prompteur ? '' : 'off'}"></span>${ic('chevron')}`;
+      li.innerHTML = `${ic('screen')}<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div><span class="dot ${d.playing ? '' : 'off'}"></span>${ic('chevron')}`;
       li.querySelector('.li-title').textContent = d.nom || 'Appareil';
-      const st = RC.states[key];
-      const fresh = st && Date.now() - st.at < 8000;
-      li.querySelector('.li-sub').textContent = d.prompteur
-        ? (fresh && st.open ? (st.titre || '') + (st.playing ? ' · en lecture' : ' · en pause') : 'Prompteur ouvert')
+      li.querySelector('.li-sub').textContent = d.open
+        ? (d.titre || '') + (d.playing ? ' · en lecture' : ' · en pause')
         : 'Prêt : tu peux y lancer un texte';
       li.onclick = () => { RC.target = key; RC.last = RC.states[key] || null; RC.lastSeen = Date.now(); ping(key); renderRemote(); };
       ul.appendChild(li);
@@ -1346,9 +1339,9 @@ function renderRemote() {
     return;
   }
   $('#rc-list-view').classList.add('hidden'); $('#rc-pad').classList.remove('hidden');
-  const d = TC.devices[RC.target] || {};
   const s = RC.last;
-  const open = s ? !!s.open : !!d.prompteur;
+  const d = s || {};
+  const open = !!(s && s.open);
   $('#rc-device').innerHTML = ic('screen') + esc((s && s.nom) || d.nom || 'Appareil') +
     (lost ? ' <span class="rc-lost">· reconnexion…</span>' : '');
   $('#rc-controls').classList.toggle('hidden', !open);
