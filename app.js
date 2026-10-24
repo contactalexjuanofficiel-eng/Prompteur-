@@ -636,7 +636,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   if (P.open) requestWake();
   scheduleSync(500);
-  if (session) connectTeam();
+  if (session) { if (TC.ch && !teamChannelOk()) connectTeam(true); else connectTeam(); }
 });
 
 /* --- réglages --- */
@@ -1112,7 +1112,7 @@ $('#acc-importfile').addEventListener('change', async (e) => {
 
 /* ================= TÉLÉCOMMANDE (Supabase Realtime, canal privé de l'équipe) ================= */
 const TC = { ch: null, teamId: null, ready: false, devices: {} };
-const RC = { target: null, last: null, lastSeen: 0, tab: 'setlists' };
+const RC = { target: null, last: null, lastSeen: 0, tab: 'setlists', states: {} };
 
 function connectTeam(force) {
   if (!sb || !session || !team.id) return;
@@ -1140,24 +1140,37 @@ function connectTeam(force) {
     if (!payload || !payload.to || payload.to === prefs.deviceId) sendState(true);
   });
   ch.on('broadcast', { event: 'state' }, ({ payload }) => {
-    if (!payload || payload.from !== RC.target) return;
-    RC.last = payload; RC.lastSeen = Date.now();
+    if (!payload || !payload.from) return;
+    // on garde le dernier état de chaque appareil (liste et télécommande)
+    RC.states[payload.from] = Object.assign({}, payload, { at: Date.now() });
+    if (payload.from === RC.target) { RC.last = payload; RC.lastSeen = Date.now(); }
     renderRemote();
   });
   ch.subscribe((status) => {
     if (ch !== TC.ch) return;
     TC.ready = status === 'SUBSCRIBED';
-    if (TC.ready) { trackPresence(); if (RC.target) ping(RC.target); }
-    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+    if (TC.ready) {
+      TC.retry = 0; lastTracked = '';
+      trackPresence();
+      ping(RC.target || null);
+    }
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
       console.warn('Canal équipe :', status);
-      setTimeout(() => { if (ch === TC.ch) connectTeam(true); }, 5000);
+      // reconnexion automatique, de plus en plus espacée (max 30 s)
+      const wait = Math.min(30000, 2000 * Math.pow(2, TC.retry || 0));
+      TC.retry = (TC.retry || 0) + 1;
+      clearTimeout(TC.retryTimer);
+      TC.retryTimer = setTimeout(() => { TC.retryTimer = 0; if (ch === TC.ch) connectTeam(true); }, wait);
     }
     renderRemote();
   });
 }
+function teamChannelOk() { return !!TC.ch && TC.ready && TC.ch.state === 'joined'; }
 function disconnectTeam() {
-  if (TC.ch) { try { sb.removeChannel(TC.ch); } catch {} }
+  const ch = TC.ch;
   TC.ch = null; TC.ready = false; TC.teamId = null; TC.devices = {};
+  clearTimeout(TC.retryTimer); TC.retryTimer = 0;
+  if (ch) { try { sb.removeChannel(ch); } catch {} }
 }
 
 // Commande reçue d'une télécommande de l'équipe.
@@ -1195,27 +1208,33 @@ async function remoteCommand(c) {
 
 // Chaque appareil connecté s'annonce à l'équipe (prompteur ouvert ou non) :
 // il apparaît dans la télécommande et peut recevoir un texte à lancer.
-let trackTimer = 0;
+// La présence ne contient que des infos qui changent rarement (nom, prompteur ouvert) et
+// n'est renvoyée qu'en cas de changement, au plus toutes les 3 s : Supabase coupe sinon
+// l'appareil (limite de débit). Le titre et la lecture passent par les messages « state ».
+let trackTimer = 0, lastTracked = '', lastTrackAt = 0;
 function trackPresence() {
   if (!TC.ready) return;
   clearTimeout(trackTimer);
+  const wait = Math.max(200, 3000 - (Date.now() - lastTrackAt));
   trackTimer = setTimeout(() => {
-    if (!TC.ready) return;
-    const t = P.open ? curTexte() : null;
-    TC.ch.track({
-      appareil: true, nom: prefs.deviceName, prompteur: P.open,
-      titre: t ? (t.titre || 'Sans titre') : '', playing: P.open && (P.playing || P.counting)
-    });
-  }, 150);
+    if (!teamChannelOk()) return;
+    const meta = { appareil: true, nom: prefs.deviceName, prompteur: P.open };
+    const key = JSON.stringify(meta);
+    if (key === lastTracked) return;
+    lastTracked = key; lastTrackAt = Date.now();
+    TC.ch.track(meta);
+  }, wait);
 }
 function untrackPresence() { trackPresence(); }
 
-let lastStateSend = 0;
-function sendState(force) {
+// État envoyé aux télécommandes : au plus un message toutes les 250 ms (le dernier part toujours).
+let lastStateSend = 0, stateTimer = 0;
+function sendState() {
   if (!TC.ready) return;
-  const now = Date.now();
-  if (!force && now - lastStateSend < 300) return;
-  lastStateSend = now;
+  const wait = 250 - (Date.now() - lastStateSend);
+  if (wait > 0) { clearTimeout(stateTimer); stateTimer = setTimeout(sendState, wait); return; }
+  if (!teamChannelOk()) return;
+  lastStateSend = Date.now();
   if (!P.open) {
     TC.ch.send({ type: 'broadcast', event: 'state', payload: { from: prefs.deviceId, nom: prefs.deviceName, open: false } });
     return;
@@ -1301,9 +1320,8 @@ function renderRemote() {
     $('#rc-devices').innerHTML = ''; $('#rc-none').classList.add('hidden');
     return;
   }
-  if (RC.target && !TC.devices[RC.target] && TC.ready && Date.now() - RC.lastSeen > 6000) {
-    RC.target = null; RC.last = null; toast('L\'appareil s\'est déconnecté');
-  }
+  // une coupure passagère ne fait pas perdre l'appareil choisi : on affiche « reconnexion »
+  const lost = RC.target && (!teamChannelOk() || (!TC.devices[RC.target] && Date.now() - RC.lastSeen > 8000));
   if (!RC.target) {
     $('#rc-pad').classList.add('hidden'); $('#rc-list-view').classList.remove('hidden');
     $('#rc-intro').textContent = TC.ready
@@ -1316,10 +1334,12 @@ function renderRemote() {
       const li = document.createElement('li');
       li.innerHTML = `${ic('screen')}<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div><span class="dot ${d.prompteur ? '' : 'off'}"></span>${ic('chevron')}`;
       li.querySelector('.li-title').textContent = d.nom || 'Appareil';
+      const st = RC.states[key];
+      const fresh = st && Date.now() - st.at < 8000;
       li.querySelector('.li-sub').textContent = d.prompteur
-        ? (d.titre || '') + (d.playing ? ' · en lecture' : ' · en pause')
+        ? (fresh && st.open ? (st.titre || '') + (st.playing ? ' · en lecture' : ' · en pause') : 'Prompteur ouvert')
         : 'Prêt : tu peux y lancer un texte';
-      li.onclick = () => { RC.target = key; RC.last = null; RC.lastSeen = Date.now(); ping(key); renderRemote(); };
+      li.onclick = () => { RC.target = key; RC.last = RC.states[key] || null; RC.lastSeen = Date.now(); ping(key); renderRemote(); };
       ul.appendChild(li);
     }
     $('#rc-none').classList.toggle('hidden', !TC.ready || entries.length > 0);
@@ -1329,7 +1349,8 @@ function renderRemote() {
   const d = TC.devices[RC.target] || {};
   const s = RC.last;
   const open = s ? !!s.open : !!d.prompteur;
-  $('#rc-device').innerHTML = ic('screen') + esc((s && s.nom) || d.nom || 'Appareil');
+  $('#rc-device').innerHTML = ic('screen') + esc((s && s.nom) || d.nom || 'Appareil') +
+    (lost ? ' <span class="rc-lost">· reconnexion…</span>' : '');
   $('#rc-controls').classList.toggle('hidden', !open);
   $('#rc-launch-title').textContent = open ? 'Lancer autre chose' : 'Lancer sur cet appareil';
   $('#rc-launch-hint').textContent = open
@@ -1365,7 +1386,13 @@ function renderRemote() {
     ol.appendChild(li);
   });
 }
-setInterval(() => { if (visible('v-remote')) renderRemote(); }, 3000);
+// La télécommande demande l'état régulièrement : ça maintient le lien et détecte les coupures.
+setInterval(() => {
+  if (!visible('v-remote')) return;
+  if (TC.ch && !teamChannelOk() && !TC.retryTimer) connectTeam(true);
+  ping(RC.target || null);
+  renderRemote();
+}, 3000);
 
 /* ================= DÉMARRAGE ================= */
 if (!Object.keys(db.textes).length && !store.get('pr_welcomed', false)) {

@@ -297,3 +297,4 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
 .rc-library li { cursor: pointer; }
 .rc-library .li-play { pointer-events: none; }
 .flat-list li .li-play .ic { color: #fff; }
+.rc-lost { color: var(--muted); font-weight: 500; }
