@@ -187,7 +187,35 @@ function firstLine(s) {
   return (s || '').split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#')) || '';
 }
 
+/* --- chargement au démarrage : squelette pendant au moins 0,7 s, puis les textes en fondu --- */
+const BOOT = { on: true, start: Date.now(), MIN: 700 };
+function skeleton(n) {
+  return Array.from({ length: n }, (_, i) => `<li class="skel" aria-hidden="true"><div class="li-main">
+    <div class="sk sk-title" style="width:${[62, 48, 70, 55, 40][i % 5]}%"></div><div class="sk sk-sub" style="width:${[80, 66, 74, 58, 70][i % 5]}%"></div>
+  </div><span class="sk sk-btn"></span></li>`).join('');
+}
+function bootDone() {
+  if (!BOOT.on) return;
+  const wait = Math.max(0, BOOT.MIN - (Date.now() - BOOT.start));
+  setTimeout(() => {
+    if (!BOOT.on) return;
+    BOOT.on = false;
+    renderHome();
+    for (const ul of [$('#list-textes'), $('#list-setlists')]) { ul.classList.remove('appear'); void ul.offsetWidth; ul.classList.add('appear'); }
+  }, wait);
+}
+// au pire, on affiche ce qu'on a en mémoire : vite si l'appareil a déjà des textes, sinon après 5 s
+setTimeout(bootDone, store.get('pr_lastsync', null) ? 1500 : 5000);
+
 function renderHome() {
+  if (BOOT.on) {
+    $('#list-textes').innerHTML = skeleton(5);
+    $('#list-setlists').innerHTML = skeleton(3);
+    $('#empty-textes').classList.add('hidden'); $('#empty-setlists').classList.add('hidden');
+    $('#team-chip').classList.add('hidden');
+    $('#fab').classList.add('hidden'); $('#btn-import').classList.add('hidden');
+    return;
+  }
   const edit = canEdit();
   const t = team.current();
   const chip = $('#team-chip');
@@ -1259,7 +1287,7 @@ async function pushDirty(table, map, fields) {
 
 async function sync() {
   if (!sb || !session || !team.id || syncing || !navigator.onLine) return;
-  syncing = true; setBanner('Synchronisation…');
+  syncing = true; $('#btn-account').classList.add('syncing');
   try {
     const [a, b] = await Promise.all([
       sb.from('prompteur_textes').select('*').eq('equipe_id', team.id),
@@ -1281,7 +1309,7 @@ async function sync() {
   } catch (e) {
     console.warn(e);
     setBanner('Synchro impossible pour l\'instant — tes textes restent sur l\'appareil.');
-  } finally { syncing = false; }
+  } finally { syncing = false; $('#btn-account').classList.remove('syncing'); }
 }
 
 function setBanner(msg) {
@@ -1421,6 +1449,7 @@ $('#acc-out').addEventListener('submit', async (e) => {
   const c = creds(); if (!c) return; accMsg('Connexion…');
   const { error } = await sb.auth.signInWithPassword(c);
   if (error) return accMsg(frErr(error));
+  if (isIOS && !isInstalled) setTimeout(installHelp, 400);
   accMsg(isIOS && !isInstalled
     ? 'Connecté. Pour rester connecté, installe l\'appli sur l\'écran d\'accueil (Partager puis « Sur l\'écran d\'accueil ») et connecte-toi une fois dedans.'
     : 'Connecté. Tu resteras connecté sur cet appareil.');
@@ -1600,10 +1629,11 @@ if (sb) {
         connectTeam();
         handleInvite();
         await sync();
+        bootDone();
         if (visible('v-account')) { await loadMembers(); renderAccount(); }
       }, 0);
     }
-    if (!s && event === 'INITIAL_SESSION') setTimeout(handleInvite, 0);
+    if (!s && event === 'INITIAL_SESSION') { setTimeout(handleInvite, 0); bootDone(); }
     if (!s && event !== 'INITIAL_SESSION') disconnectTeam();
     renderAccount(); renderHome();
   });
@@ -1976,6 +2006,7 @@ Et voilà, c'est à toi !
 }
 renderHome();
 renderAccount();
+if (!sb) bootDone();
 
 /* ================= MODE D'EMPLOI ================= */
 const DEMO_ID = 'demo-mode-emploi';
@@ -2032,7 +2063,7 @@ $('#s-stage').onclick = () => stageChecklist();
 $('#help-stage').onclick = () => stageChecklist();
 
 /* --- retours des testeurs --- */
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 function deviceLabel(ua) {
   const ios = ua.match(/OS (\d+)_(\d+)/);
   if (/iPhone/.test(ua)) return 'iPhone' + (ios ? ` iOS ${ios[1]}.${ios[2]}` : '');
@@ -2132,7 +2163,20 @@ function renderInstallBanner() {
   try { closed = sessionStorage.getItem('pr_install_closed') === '1'; } catch {}
   $('#install-banner').classList.toggle('hidden', !isIOS || isInstalled || closed);
 }
-$('#install-close').onclick = () => {
+function installHelp() {
+  return modal({
+    title: 'Pour rester connecté', icon: 'share',
+    message: 'Tu utilises Prompteur dans Safari : il peut t\'oublier, surtout en navigation privée.\n\n'
+      + '1. Touche Partager (le carré avec une flèche) en bas de Safari.\n'
+      + '2. Choisis « Sur l\'écran d\'accueil » puis Ajouter. Attention : « Ajouter un signet » ou « Favoris » ne suffit pas.\n'
+      + '3. Ouvre Prompteur depuis la nouvelle icône et connecte-toi une fois dedans.\n\n'
+      + 'Si l\'onglet Safari est sombre avec « Privé », quitte d\'abord la navigation privée.',
+    buttons: [{ label: 'Compris', value: true }]
+  });
+}
+$('#install-banner').addEventListener('click', (e) => { if (!e.target.closest('#install-close')) installHelp(); });
+$('#install-close').onclick = (e) => {
+  e.stopPropagation();
   try { sessionStorage.setItem('pr_install_closed', '1'); } catch {}
   renderInstallBanner();
 };

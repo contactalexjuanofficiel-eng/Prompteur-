@@ -409,3 +409,23 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
 .fb-item { align-items: flex-start !important; }
 .fb-meta { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
 .fb-msg { white-space: pre-wrap; font-size: 15px; line-height: 1.4; }
+
+/* ---------- chargement ---------- */
+.skel { pointer-events: none; }
+.sk { display: block; border-radius: 6px; background: linear-gradient(90deg, var(--card2) 0%, #33333b 50%, var(--card2) 100%); background-size: 200% 100%; animation: shimmer 1.2s ease-in-out infinite; }
+.sk-title { height: 16px; margin: 2px 0 8px; }
+.sk-sub { height: 12px; }
+.sk-btn { width: 44px; height: 44px; border-radius: 22px; flex: none; }
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+.list.appear li { animation: appear .3s ease-out both; }
+.list.appear li:nth-child(2) { animation-delay: .03s; } .list.appear li:nth-child(3) { animation-delay: .06s; }
+.list.appear li:nth-child(4) { animation-delay: .09s; } .list.appear li:nth-child(n+5) { animation-delay: .12s; }
+@keyframes appear { from { opacity: 0; transform: translateY(6px); } }
+#btn-account.syncing { position: relative; }
+#btn-account.syncing::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.install-banner { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .sk, #btn-account.syncing::after, .list.appear li { animation: none; } }
