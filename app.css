@@ -258,3 +258,27 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
   .list:not(.flat-list), .searchrow, .edit-body, .rc-pad { max-width: 720px; width: 100%; margin-left: auto; margin-right: auto; }
   .tabs { max-width: 688px; width: calc(100% - 32px); margin-left: auto; margin-right: auto; }
 }
+
+/* ---------- fenêtre modale ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+  padding: 24px calc(16px + var(--safe-r)) calc(24px + var(--safe-b)) calc(16px + var(--safe-l));
+  background: rgba(0, 0, 0, .6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  animation: modal-fade .15s ease-out;
+}
+.modal-card {
+  width: 100%; max-width: 400px; background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+  padding: 22px 20px 18px; display: flex; flex-direction: column; gap: 10px; text-align: center; color: var(--text);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .55); animation: modal-pop .18s ease-out;
+}
+.modal-icon { align-self: center; width: 52px; height: 52px; border-radius: 26px; display: flex; align-items: center; justify-content: center; background: var(--card2); color: var(--accent); }
+.modal-icon.danger { background: rgba(255, 77, 79, .15); color: var(--danger); }
+.modal-icon .ic { width: 26px; height: 26px; }
+.modal-card h3 { margin: 4px 0 0; font-size: 19px; }
+.modal-card p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
+.modal-card input { margin-top: 4px; background: var(--card2); }
+.modal-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.modal-actions .danger-btn { background: var(--danger); color: #fff; }
+.modal-actions .ghost { background: none; color: var(--muted); padding: 10px; }
+@keyframes modal-fade { from { opacity: 0; } }
+@keyframes modal-pop { from { opacity: 0; transform: scale(.94); } }

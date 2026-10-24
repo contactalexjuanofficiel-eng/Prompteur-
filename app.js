@@ -81,6 +81,74 @@ function toast(msg, ms = 2200) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.add('hidden'), ms);
 }
 
+/* --- fenêtres modales (jamais de boîte de dialogue du navigateur) --- */
+let modalResolve = null;
+function modal({ title, message = '', icon = null, danger = false, input = null, buttons }) {
+  if (modalResolve) modalResolve(null);
+  const el = $('#modal'), inp = $('#modal-input'), acts = $('#modal-actions');
+  const ico = $('#modal-icon');
+  ico.classList.toggle('hidden', !icon);
+  ico.classList.toggle('danger', danger);
+  if (icon) ico.innerHTML = ic(icon);
+  $('#modal-title').textContent = title;
+  $('#modal-msg').textContent = message;
+  $('#modal-msg').classList.toggle('hidden', !message);
+  inp.classList.toggle('hidden', !input);
+  if (input) {
+    inp.type = input.type || 'text';
+    inp.value = input.value || '';
+    inp.placeholder = input.placeholder || '';
+  }
+  acts.innerHTML = '';
+  return new Promise((resolve) => {
+    const done = (v) => {
+      if (modalResolve !== finish) return;
+      modalResolve = null; el.classList.add('hidden'); resolve(v);
+    };
+    const finish = done;
+    modalResolve = finish;
+    for (const b of buttons) {
+      const btn = document.createElement('button');
+      btn.className = b.style === 'danger' ? 'primary danger-btn' : b.style === 'ghost' ? 'ghost' : b.style === 'secondary' ? 'secondary' : 'primary';
+      btn.textContent = b.label;
+      btn.onclick = () => {
+        if (input && b.value === true) {
+          const v = inp.value.trim();
+          if (input.min && v.length < input.min) { inp.focus(); toast(input.minMsg || 'Valeur trop courte'); return; }
+          return done(v);
+        }
+        done(b.value);
+      };
+      acts.appendChild(btn);
+    }
+    el.classList.remove('hidden');
+    if (input) setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  });
+}
+$('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal' && modalResolve) modalResolve(null); });
+// Tant qu'une fenêtre est ouverte, le clavier (et la pédale) ne pilote plus le prompteur.
+document.addEventListener('keydown', (e) => {
+  if (!modalResolve) return;
+  if (e.key === 'Escape') { e.preventDefault(); modalResolve(null); }
+  else if (e.key === 'Enter' && e.target.id === 'modal-input') {
+    e.preventDefault(); const btn = $('#modal-actions').firstElementChild; if (btn) btn.click();
+  }
+  e.stopImmediatePropagation();
+}, true);
+
+function confirmModal(title, message, ok, opts = {}) {
+  return modal({
+    title, message, icon: opts.icon || (opts.danger ? 'trash' : null), danger: !!opts.danger,
+    buttons: [{ label: ok, value: true, style: opts.danger ? 'danger' : 'primary' }, { label: 'Annuler', value: false, style: 'ghost' }]
+  }).then(v => v === true);
+}
+function promptModal(title, message, ok, input) {
+  return modal({
+    title, message, icon: input.icon || null, input,
+    buttons: [{ label: ok, value: true, style: 'primary' }, { label: 'Annuler', value: false, style: 'ghost' }]
+  }).then(v => (typeof v === 'string' && v) ? v : null);
+}
+
 const stack = [];
 const visible = (id) => !$('#' + id).classList.contains('hidden');
 function show(id, push = true) {
@@ -219,9 +287,10 @@ $('#edit-import').addEventListener('change', async (e) => {
   if (!$('#edit-titre').value) $('#edit-titre').value = f.name.replace(/\.[^.]+$/, '');
   e.target.value = ''; updateStats(); flushEdit();
 });
-$('#edit-delete').addEventListener('click', () => {
+$('#edit-delete').addEventListener('click', async () => {
   const t = editId && db.textes[editId];
-  if (!t || !canEdit() || !confirm(`Supprimer « ${t.titre || 'Sans titre'} » ?`)) return;
+  if (!t || !canEdit()) return;
+  if (!await confirmModal('Supprimer ce texte ?', `« ${t.titre || 'Sans titre'} » sera supprimé pour toute l'équipe.`, 'Supprimer', { danger: true })) return;
   t.supprime = true; touchTexte(t); editId = null; back();
 });
 $('#edit-play').addEventListener('click', () => {
@@ -268,9 +337,10 @@ $('#sl-nom').addEventListener('input', () => {
   if (!canEdit()) return;
   const s = db.setlists[slId]; s.nom = $('#sl-nom').value; touchSetlist(s);
 });
-$('#sl-delete').addEventListener('click', () => {
+$('#sl-delete').addEventListener('click', async () => {
   const s = db.setlists[slId];
-  if (!canEdit() || !confirm(`Supprimer la setlist « ${s.nom || 'sans nom'} » ? (les textes sont conservés)`)) return;
+  if (!canEdit()) return;
+  if (!await confirmModal('Supprimer cette setlist ?', `« ${s.nom || 'Setlist sans nom'} » sera supprimée. Les textes qu'elle contient sont conservés.`, 'Supprimer', { danger: true })) return;
   s.supprime = true; touchSetlist(s); back();
 });
 $('#sl-play').addEventListener('click', () => {
@@ -835,7 +905,17 @@ $('#acc-reset').onclick = async () => {
 };
 $('#acc-sync').onclick = async () => { accMsg('Synchronisation…'); await loadTeams(); await sync(); await loadMembers(); renderAccount(); renderHome(); accMsg(''); };
 $('#acc-logout').onclick = async () => {
-  const wipe = confirm('Effacer aussi les textes de l\'équipe sur CET appareil ?\n(Ils restent sauvegardés en ligne.)\n\nOK = effacer · Annuler = garder');
+  const choice = await modal({
+    title: 'Se déconnecter ?', icon: 'logout',
+    message: 'Les textes de l\'équipe restent sauvegardés en ligne. Tu peux aussi les retirer de cet appareil.',
+    buttons: [
+      { label: 'Se déconnecter', value: 'keep', style: 'primary' },
+      { label: 'Se déconnecter et effacer de cet appareil', value: 'wipe', style: 'secondary' },
+      { label: 'Annuler', value: null, style: 'ghost' }
+    ]
+  });
+  if (!choice) return;
+  const wipe = choice === 'wipe';
   disconnectTeam();
   await sb.auth.signOut();
   if (wipe) {
@@ -863,7 +943,8 @@ $('#team-share').onclick = async () => {
   } catch {}
 };
 $('#team-newcode').onclick = async () => {
-  const t = team.current(); if (!t || !confirm('Créer un nouveau code ? L\'ancien ne fonctionnera plus.')) return;
+  const t = team.current(); if (!t) return;
+  if (!await confirmModal('Nouveau code d\'invitation ?', 'L\'ancien code ne fonctionnera plus. Les membres déjà dans l\'équipe ne sont pas concernés.', 'Créer un nouveau code', { icon: 'refresh' })) return;
   const { data, error } = await sb.rpc('prompteur_nouveau_code', { p_equipe: t.id });
   if (error) return accMsg(frErr(error));
   t.code_invitation = data; team.save(); renderAccount();
@@ -880,7 +961,8 @@ $('#join-btn').onclick = async () => {
   accMsg(`Tu as rejoint l'équipe « ${(team.current() || {}).nom || ''} ».`);
 };
 $('#team-create').onclick = async () => {
-  const nom = prompt('Nom de la nouvelle équipe :', 'Mon groupe');
+  const nom = await promptModal('Nouvelle équipe', 'Tu en seras l\'admin. Tu pourras inviter tes musiciens avec son code.', 'Créer l\'équipe',
+    { placeholder: 'Nom de l\'équipe (ex : Mon groupe)', icon: 'users', min: 1, minMsg: 'Donne un nom à l\'équipe' });
   if (!nom) return;
   const { data, error } = await sb.rpc('prompteur_creer_equipe', { p_nom: nom });
   if (error) return accMsg(frErr(error));
@@ -888,7 +970,8 @@ $('#team-create').onclick = async () => {
   accMsg(`Équipe « ${nom} » créée. Tu en es l'admin.`);
 };
 $('#team-leave').onclick = async () => {
-  const t = team.current(); if (!t || !confirm(`Quitter l'équipe « ${t.nom} » ?`)) return;
+  const t = team.current(); if (!t) return;
+  if (!await confirmModal('Quitter l\'équipe ?', `Tu n'auras plus accès aux textes de « ${t.nom} ». Il faudra un nouveau code pour revenir.`, 'Quitter l\'équipe', { danger: true, icon: 'logout' })) return;
   const { error } = await sb.from('prompteur_membres').delete().eq('equipe_id', t.id).eq('user_id', session.user.id);
   if (error) return accMsg(frErr(error));
   team.id = null; await loadTeams(); await selectTeam(team.id);
@@ -899,7 +982,7 @@ async function setRole(m, role) {
   await loadMembers(); renderAccount();
 }
 async function removeMember(m) {
-  if (!confirm(`Retirer ${m.email || 'ce membre'} de l'équipe ?`)) return;
+  if (!await confirmModal('Retirer ce membre ?', `${m.email || 'Ce membre'} n'aura plus accès aux textes de l'équipe.`, 'Retirer', { danger: true, icon: 'x' })) return;
   const { error } = await sb.from('prompteur_membres').delete().eq('equipe_id', team.id).eq('user_id', m.user_id);
   if (error) return accMsg(frErr(error));
   await loadMembers(); renderAccount();
@@ -911,8 +994,9 @@ if (sb) {
     // la session restaurée au démarrage n'est pas transmise automatiquement au temps réel
     if (s) { try { sb.realtime.setAuth(s.access_token); } catch {} }
     if (event === 'PASSWORD_RECOVERY') {
-      const p = prompt('Nouveau mot de passe (6 caractères min.) :');
-      if (p && p.length >= 6) sb.auth.updateUser({ password: p }).then(({ error }) => toast(error ? frErr(error) : 'Mot de passe modifié'));
+      promptModal('Nouveau mot de passe', 'Choisis ton nouveau mot de passe (6 caractères minimum).', 'Enregistrer',
+        { type: 'password', placeholder: 'Nouveau mot de passe', icon: 'user', min: 6, minMsg: '6 caractères minimum' })
+        .then(p => p && sb.auth.updateUser({ password: p }).then(({ error }) => toast(error ? frErr(error) : 'Mot de passe modifié')));
     }
     if (s && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
       // hors du callback d'authentification pour ne pas bloquer le client
