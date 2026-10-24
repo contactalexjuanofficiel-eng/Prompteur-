@@ -321,3 +321,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
 .help .ic.inline { color: var(--accent); }
 .topbar h2 { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 360px) { .topbar h2 { font-size: 15px; } .spacer { width: 50px; } }
+.install-banner {
+  margin: 0 16px 8px; padding: 10px 6px 10px 12px; border-radius: 12px; display: flex; align-items: center; gap: 10px;
+  background: rgba(255, 176, 32, .12); border: 1px solid rgba(255, 176, 32, .35); font-size: 14px;
+}
+.install-banner > .ic { color: var(--accent2); }
+.install-banner .small { color: var(--muted); margin-top: 2px; }
+.install-banner .icon-btn { background: none; width: 36px; height: 36px; }

@@ -907,7 +907,9 @@ $('#acc-out').addEventListener('submit', async (e) => {
   const c = creds(); if (!c) return; accMsg('Connexion…');
   const { error } = await sb.auth.signInWithPassword(c);
   if (error) return accMsg(frErr(error));
-  accMsg('Connecté. Tu resteras connecté sur cet appareil.');
+  accMsg(isIOS && !isInstalled
+    ? 'Connecté. Pour rester connecté, installe l\'appli sur l\'écran d\'accueil (Partager puis « Sur l\'écran d\'accueil ») et connecte-toi une fois dedans.'
+    : 'Connecté. Tu resteras connecté sur cet appareil.');
   $('#acc-pass').value = '';
 });
 $('#acc-signup').onclick = async () => {
@@ -1455,6 +1457,35 @@ if (!store.get('pr_notice_vu', false)) {
     }).then(v => { if (v) show('v-help'); });
   }, 700);
 }
+
+/* ================= MÉMOIRE DE L'APPAREIL ================= */
+// Sur iPhone, Safari en navigation privée ou avec « Bloquer tous les cookies » n'enregistre rien :
+// la connexion et les textes sont perdus au rechargement. On le détecte et on explique quoi faire.
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const isInstalled = navigator.standalone === true ||
+  ['standalone', 'fullscreen'].some(m => window.matchMedia && window.matchMedia(`(display-mode: ${m})`).matches);
+function storageWorks() {
+  try { localStorage.setItem('pr_test', '1'); const ok = localStorage.getItem('pr_test') === '1'; localStorage.removeItem('pr_test'); return ok; }
+  catch { return false; }
+}
+if (!storageWorks()) {
+  setTimeout(() => modal({
+    title: 'Ton navigateur n\'enregistre rien', icon: 'x', danger: true,
+    message: 'Tu devras te reconnecter à chaque fois et tes textes ne seront pas gardés. Sur iPhone : quitte la navigation privée, ou va dans Réglages > Apps > Safari et désactive « Bloquer tous les cookies ». Puis installe l\'appli sur l\'écran d\'accueil.',
+    buttons: [{ label: 'J\'ai compris', value: true }]
+  }), 900);
+}
+// Dans Safari (pas l'appli installée), on rappelle d'installer l'appli : c'est elle qui garde la connexion.
+function renderInstallBanner() {
+  let closed = false;
+  try { closed = sessionStorage.getItem('pr_install_closed') === '1'; } catch {}
+  $('#install-banner').classList.toggle('hidden', !isIOS || isInstalled || closed);
+}
+$('#install-close').onclick = () => {
+  try { sessionStorage.setItem('pr_install_closed', '1'); } catch {}
+  renderInstallBanner();
+};
+renderInstallBanner();
 
 // Demande à l'appareil de ne jamais effacer les données de l'appli (session, textes hors ligne).
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
