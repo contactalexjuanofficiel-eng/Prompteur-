@@ -640,6 +640,7 @@ function renderAccount() {
 }
 const accMsg = (m) => { $('#acc-msg').textContent = m || ''; };
 function creds() {
+  if (!sb) { accMsg('La sauvegarde en ligne n\'est pas encore configurée. Tes textes restent sur cet appareil.'); return null; }
   const email = $('#acc-email').value.trim(), password = $('#acc-pass').value;
   if (!email || password.length < 6) { accMsg('Entre ton email et un mot de passe d\'au moins 6 caractères.'); return null; }
   return { email, password };
@@ -653,17 +654,18 @@ function frErr(e) {
   return m;
 }
 $('#acc-login').onclick = async () => {
-  const c = creds(); if (!c || !sb) return; accMsg('Connexion…');
+  const c = creds(); if (!c) return; accMsg('Connexion…');
   const { error } = await sb.auth.signInWithPassword(c);
   accMsg(error ? frErr(error) : 'Connecté ✓');
 };
 $('#acc-signup').onclick = async () => {
-  const c = creds(); if (!c || !sb) return; accMsg('Création du compte…');
+  const c = creds(); if (!c) return; accMsg('Création du compte…');
   const { data, error } = await sb.auth.signUp({ ...c, options: { emailRedirectTo: location.origin + location.pathname } });
   if (error) return accMsg(frErr(error));
   accMsg(data.session ? 'Compte créé et connecté ✓' : 'Compte créé ! Clique sur le lien reçu par email, puis reviens ici et connecte-toi.');
 };
 $('#acc-reset').onclick = async () => {
+  if (!sb) return accMsg('La sauvegarde en ligne n\'est pas encore configurée.');
   const email = $('#acc-email').value.trim(); if (!email) return accMsg('Entre ton email ci-dessus.');
   const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
   accMsg(error ? frErr(error) : 'Email de réinitialisation envoyé.');

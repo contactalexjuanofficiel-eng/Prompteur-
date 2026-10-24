@@ -32,6 +32,6 @@ N'importe quel hébergement de fichiers statiques fonctionne aussi (Netlify, Ver
 
 ## Supabase
 
-Tables `prompteur_textes` et `prompteur_setlists` avec RLS (chaque utilisateur ne voit que ses données).
+Tables `prompteur_textes` et `prompteur_setlists` avec RLS (chaque utilisateur ne voit que ses données) : schéma dans `supabase/schema.sql`.
 Connexion configurée dans `config.js`. Pour que les liens des emails (confirmation, mot de passe oublié)
 reviennent vers l'appli, ajoute son adresse dans Supabase → **Authentication → URL Configuration → Redirect URLs**.
