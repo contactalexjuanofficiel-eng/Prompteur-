@@ -1429,7 +1429,7 @@ function renderAccount() {
 const accMsg = (m) => { $('#acc-msg').textContent = m || ''; };
 function frErr(e) {
   const m = (e && e.message) || String(e);
-  if (/Invalid login/i.test(m)) return 'Email ou mot de passe incorrect.';
+  if (/Invalid login/i.test(m)) return `Email ou mot de passe incorrect. Vérifie bien l'adresse : ${($('#acc-email').value || '').trim()}`;
   if (/not confirmed/i.test(m)) return 'Confirme d\'abord ton email (regarde ta boîte mail), puis reconnecte-toi.';
   if (/already registered/i.test(m)) return 'Ce compte existe déjà : utilise « Se connecter ».';
   if (/Code invalide/i.test(m)) return 'Code d\'invitation inconnu. Vérifie-le auprès de ton admin.';
@@ -1465,7 +1465,7 @@ $('#acc-reset').onclick = async () => {
   if (!sb) return accMsg('La sauvegarde en ligne n\'est pas configurée.');
   const email = $('#acc-email').value.trim(); if (!email) return accMsg('Entre ton email ci-dessus.');
   const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-  accMsg(error ? frErr(error) : 'Email de réinitialisation envoyé.');
+  accMsg(error ? frErr(error) : `Si un compte existe pour ${email}, un email vient d'être envoyé. Rien reçu ? Vérifie l'adresse et regarde dans les spams.`);
 };
 $('#acc-sync').onclick = async () => { accMsg('Synchronisation…'); await loadTeams(); await sync(); await loadMembers(); renderAccount(); renderHome(); accMsg(''); };
 $('#acc-logout').onclick = async () => {
@@ -2063,7 +2063,7 @@ $('#s-stage').onclick = () => stageChecklist();
 $('#help-stage').onclick = () => stageChecklist();
 
 /* --- retours des testeurs --- */
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 function deviceLabel(ua) {
   const ios = ua.match(/OS (\d+)_(\d+)/);
   if (/iPhone/.test(ua)) return 'iPhone' + (ios ? ` iOS ${ios[1]}.${ios[2]}` : '');
