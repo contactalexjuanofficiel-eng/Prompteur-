@@ -389,3 +389,6 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
 .modal-card { max-height: calc(100dvh - 48px); overflow-y: auto; }
 .modal-card > * { flex-shrink: 0; }
 #modal-msg.long { text-align: left; color: var(--text); }
+.hist-intro { margin: 10px 16px 0; }
+#hist-list li { cursor: pointer; }
+@media (max-width: 400px) { #v-edit .topbar-actions .lbl { display: none; } #v-edit .topbar-actions .link-btn { padding: 8px; } }

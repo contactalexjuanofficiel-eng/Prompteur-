@@ -100,7 +100,8 @@
   <header class="topbar">
     <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
     <div class="topbar-actions">
-      <button class="link-btn danger" id="edit-delete"><svg class="ic"><use href="#i-trash"/></svg>Supprimer</button>
+      <button class="link-btn hidden" id="edit-history" aria-label="Historique"><svg class="ic"><use href="#i-clock"/></svg><span class="lbl">Historique</span></button>
+      <button class="link-btn danger" id="edit-delete" aria-label="Supprimer"><svg class="ic"><use href="#i-trash"/></svg><span class="lbl">Supprimer</span></button>
     </div>
   </header>
   <div class="edit-body">
@@ -147,6 +148,18 @@ Ligne vide         → espace"></textarea>
     <button class="primary big" id="sl-play"><svg class="ic"><use href="#i-play"/></svg>Lancer la setlist</button>
   </div>
 </section>
+
+<!-- ============ HISTORIQUE D'UN TEXTE ============ -->
+<div id="hist-sheet" class="sheet hidden">
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <b>Historique</b>
+      <button class="link-btn" id="hist-done">Fermer</button>
+    </div>
+    <p class="muted small hist-intro">Versions précédentes de ce texte. Touche une version pour la voir et la restaurer.</p>
+    <ul class="list" id="hist-list"></ul>
+  </div>
+</div>
 
 <!-- ============ SÉLECTEUR DE TEXTES ============ -->
 <div id="picker" class="sheet hidden">

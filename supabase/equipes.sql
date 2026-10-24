@@ -112,3 +112,34 @@ language sql stable security definer set search_path = '' as $$
   select nom from public.prompteur_equipes where code_invitation = upper(trim(p_code));
 $$;
 grant execute on function public.prompteur_apercu_equipe(text) to anon, authenticated;
+
+-- Historique des versions des textes (archivé automatiquement à chaque modification).
+alter table public.prompteur_textes add column modifie_par uuid default auth.uid();
+create table public.prompteur_versions (
+  id bigint generated always as identity primary key,
+  texte_id uuid not null references public.prompteur_textes(id) on delete cascade,
+  equipe_id uuid not null references public.prompteur_equipes(id) on delete cascade,
+  titre text not null default '', contenu text not null default '', reglages jsonb not null default '{}'::jsonb,
+  supprime boolean not null default false, auteur uuid, auteur_email text not null default '',
+  version_du timestamptz not null, created_at timestamptz not null default now()
+);
+create index prompteur_versions_texte_idx on public.prompteur_versions(texte_id, created_at desc);
+create index prompteur_versions_equipe_idx on public.prompteur_versions(equipe_id);
+alter table public.prompteur_versions enable row level security;
+create policy "versions_select" on public.prompteur_versions for select to authenticated using (prompteur_prive.est_membre(equipe_id));
+create function prompteur_prive.archiver_texte() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  new.modifie_par := coalesce(auth.uid(), new.modifie_par);
+  if old.titre is distinct from new.titre or old.contenu is distinct from new.contenu or old.supprime is distinct from new.supprime then
+    if not (old.modifie_par is not distinct from new.modifie_par and exists (
+      select 1 from public.prompteur_versions v where v.texte_id = old.id and v.created_at > now() - interval '10 minutes')) then
+      insert into public.prompteur_versions (texte_id, equipe_id, titre, contenu, reglages, supprime, auteur, auteur_email, version_du)
+      values (old.id, old.equipe_id, old.titre, old.contenu, old.reglages, old.supprime, old.modifie_par,
+              coalesce((select u.email from auth.users u where u.id = old.modifie_par), ''), old.updated_at);
+    end if;
+  end if;
+  return new;
+end $$;
+create trigger prompteur_textes_archiver before update on public.prompteur_textes
+  for each row execute function prompteur_prive.archiver_texte();

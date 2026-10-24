@@ -257,6 +257,7 @@ function openEdit(id) {
   $('#edit-ro').classList.toggle('hidden', edit);
   $('#edit-import-btn').classList.toggle('hidden', !edit);
   $('#edit-delete').classList.toggle('hidden', !t || !edit);
+  $('#edit-history').classList.toggle('hidden', !t || !edit || !session);
   updateStats();
   show('v-edit');
   if (!t && edit) $('#edit-titre').focus();
@@ -312,6 +313,47 @@ $('#edit-import').addEventListener('change', async (e) => {
   if (!$('#edit-titre').value) $('#edit-titre').value = f.name.replace(/\.[^.]+$/, '');
   e.target.value = ''; updateStats(); flushEdit();
 });
+/* --- historique des versions (admins) --- */
+$('#edit-history').onclick = async () => {
+  const t = editId && db.textes[editId];
+  if (!t || !sb || !session) return;
+  flushEdit(); await sync();
+  const ul = $('#hist-list');
+  ul.innerHTML = '<p class="empty">Chargement…</p>';
+  $('#hist-sheet').classList.remove('hidden');
+  const { data, error } = await sb.from('prompteur_versions')
+    .select('id, titre, contenu, reglages, supprime, auteur_email, version_du, created_at')
+    .eq('texte_id', t.id).order('created_at', { ascending: false }).limit(50);
+  if (error) { ul.innerHTML = `<p class="empty">${esc(frErr(error))}</p>`; return; }
+  ul.innerHTML = '';
+  if (!data.length) { ul.innerHTML = '<p class="empty">Pas encore d\'ancienne version. Elles apparaissent ici dès que le texte est modifié.</p>'; return; }
+  for (const v of data) {
+    const li = document.createElement('li');
+    const quand = new Date(v.version_du || v.created_at).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' });
+    li.innerHTML = `${ic('clock')}<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div>${ic('chevron')}`;
+    li.querySelector('.li-title').textContent = quand;
+    li.querySelector('.li-sub').textContent = (v.auteur_email ? 'par ' + v.auteur_email : 'avant l\'historique') + ' · ' + (firstLine(v.contenu) || v.titre || 'vide');
+    li.onclick = async () => {
+      const apercu = v.contenu.length > 600 ? v.contenu.slice(0, 600) + '\n…' : v.contenu;
+      const ok = await modal({
+        title: 'Restaurer cette version ?', icon: 'clock',
+        message: `« ${v.titre || 'Sans titre'} » du ${quand}\n\n${apercu || '(texte vide)'}`,
+        buttons: [{ label: 'Restaurer cette version', value: true }, { label: 'Annuler', value: false, style: 'ghost' }]
+      });
+      if (!ok) return;
+      t.titre = v.titre; t.contenu = v.contenu; t.supprime = false;
+      t.reglages = Object.assign({}, t.reglages, v.reglages || {});
+      touchTexte(t);
+      $('#hist-sheet').classList.add('hidden');
+      openEdit(t.id);
+      toast('Version restaurée. La version d\'avant reste dans l\'historique.');
+    };
+    ul.appendChild(li);
+  }
+};
+$('#hist-done').onclick = () => $('#hist-sheet').classList.add('hidden');
+$('#hist-sheet').addEventListener('click', (e) => { if (e.target.id === 'hist-sheet') $('#hist-sheet').classList.add('hidden'); });
+
 $('#edit-delete').addEventListener('click', async () => {
   const t = editId && db.textes[editId];
   if (!t || !canEdit()) return;
