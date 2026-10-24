@@ -140,6 +140,14 @@ document.addEventListener('keydown', (e) => {
   e.stopImmediatePropagation();
 }, true);
 
+// Bouton occupé pendant une action : petite roue, impossible d'appuyer deux fois.
+async function busy(btn, fn) {
+  if (!btn || btn.dataset.busy) return;
+  btn.dataset.busy = '1'; btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true');
+  try { return await fn(); }
+  finally { delete btn.dataset.busy; btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy'); }
+}
+
 function confirmModal(title, message, ok, opts = {}) {
   return modal({
     title, message, icon: opts.icon || (opts.danger ? 'trash' : null), danger: !!opts.danger,
@@ -172,6 +180,27 @@ function onLeaveView() {
   if (visible('v-edit')) flushEdit();
   if (visible('v-remote')) RC.target = null;
 }
+
+/* --- iPhone : tirer l'écran vers le bas en haut d'une liste ne recharge pas l'appli --- */
+(() => {
+  let y0 = 0;
+  document.addEventListener('touchstart', (e) => { y0 = e.touches[0].clientY; }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 1 || e.target.closest('input[type=range], textarea')) return;
+    const dy = e.touches[0].clientY - y0;
+    if (dy <= 0) return;                       // on ne bloque que le glissement vers le bas
+    let el = e.target;
+    while (el && el !== document.body) {
+      const st = getComputedStyle(el);
+      if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight) {
+        if (el.scrollTop > 0) return;          // la liste peut encore remonter : on laisse faire
+        break;
+      }
+      el = el.parentElement;
+    }
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+})();
 
 /* ================= ACCUEIL ================= */
 let currentTab = 'textes';
@@ -351,7 +380,7 @@ $('#edit-history').onclick = async () => {
   if (!t || !sb || !session) return;
   flushEdit(); await sync();
   const ul = $('#hist-list');
-  ul.innerHTML = '<p class="empty">Chargement…</p>';
+  ul.innerHTML = skeleton(4);
   $('#hist-sheet').classList.remove('hidden');
   const { data, error } = await sb.from('prompteur_versions')
     .select('id, titre, contenu, reglages, supprime, auteur_email, version_du, created_at')
@@ -520,7 +549,9 @@ $('#imp-paste').addEventListener('input', renderImport);
 $('#imp-files').addEventListener('change', async (e) => {
   const files = Array.from(e.target.files); e.target.value = '';
   const errs = [];
-  $('#imp-msg').textContent = 'Lecture des fichiers…';
+  $('#imp-msg').textContent = '';
+  $('#imp-list').insertAdjacentHTML('beforeend', skeleton(Math.min(files.length, 4)));
+  $('#imp-go').disabled = true;
   for (const f of files) {
     try { impFiles.push(...splitTexts(await readFileText(f), baseName(f.name))); }
     catch (err) { errs.push(`${f.name} : ${err.message || 'illisible'}`); }
@@ -562,8 +593,8 @@ function renderSetlist() {
     const t = db.textes[id];
     const li = document.createElement('li');
     li.innerHTML = `<span class="li-num">${i + 1}</span><div class="li-main"><div class="li-title"></div></div>` + (edit ? `
-      <button class="li-small" data-a="up" aria-label="Monter">${ic('up')}</button>
-      <button class="li-small" data-a="down" aria-label="Descendre">${ic('down')}</button>
+      <button class="li-small" data-a="up" aria-label="Monter" ${i === 0 ? 'disabled' : ''}>${ic('up')}</button>
+      <button class="li-small" data-a="down" aria-label="Descendre" ${i === ids.length - 1 ? 'disabled' : ''}>${ic('down')}</button>
       <button class="li-small" data-a="rm" aria-label="Retirer">${ic('x')}</button>` : '');
     li.querySelector('.li-title').textContent = t.titre || 'Sans titre';
     li.querySelector('.li-main').onclick = () => startPrompter(ids, i);
@@ -1370,7 +1401,13 @@ async function selectTeam(id) {
 $('#btn-account').onclick = () => openAccount();
 async function openAccount() {
   renderAccount(); show('v-account');
-  if (session) { await loadTeams(); await loadMembers(); renderAccount(); loadFeedback(); }
+  if (session) {
+    if (!team.members.length) $('#team-members').innerHTML = skeleton(2);
+    $('#acc-in').classList.add('loading');
+    await loadTeams(); await loadMembers();
+    $('#acc-in').classList.remove('loading');
+    renderAccount(); loadFeedback();
+  }
 }
 
 function renderAccount() {
@@ -1426,7 +1463,13 @@ function renderAccount() {
   }
 }
 
-const accMsg = (m) => { $('#acc-msg').textContent = m || ''; };
+// Message du compte : encadré coloré sur l'écran de connexion, simple texte une fois connecté.
+function accMsg(m, kind = 'info') {
+  if (session) { $('#acc-msg2').textContent = m || ''; return; }
+  const el = $('#acc-msg');
+  el.textContent = m || '';
+  el.className = 'alert ' + kind + (m ? '' : ' hidden');
+}
 function frErr(e) {
   const m = (e && e.message) || String(e);
   if (/Invalid login/i.test(m)) return `Email ou mot de passe incorrect. Vérifie bien l'adresse : ${($('#acc-email').value || '').trim()}`;
@@ -1438,36 +1481,66 @@ function frErr(e) {
   return m;
 }
 function creds() {
-  if (!sb) { accMsg('La sauvegarde en ligne n\'est pas configurée. Tes textes restent sur cet appareil.'); return null; }
+  if (!sb) { accMsg('La sauvegarde en ligne n\'est pas configurée. Tes textes restent sur cet appareil.', 'error'); return null; }
   const email = $('#acc-email').value.trim(), password = $('#acc-pass').value;
-  if (!email || password.length < 6) { accMsg('Entre ton email et un mot de passe d\'au moins 6 caractères.'); return null; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { accMsg('Entre une adresse email valide.', 'error'); $('#acc-email').focus(); return null; }
+  if (password.length < 6) { accMsg('Le mot de passe doit faire au moins 6 caractères.', 'error'); $('#acc-pass').focus(); return null; }
   return { email, password };
 }
+// Connexion ou inscription : un seul formulaire, deux onglets.
+let authMode = 'login';
+function setAuthMode(m) {
+  authMode = m;
+  $$('#auth-tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === m));
+  const signup = m === 'signup';
+  $('#auth-title').textContent = signup ? 'Crée ton compte' : 'Content de te revoir';
+  $('#auth-sub').textContent = signup ? 'Gratuit. Tes textes sont sauvegardés et partagés avec ton équipe.' : 'Connecte-toi pour retrouver les textes de ton équipe.';
+  $('#acc-login').textContent = signup ? 'Créer mon compte' : 'Se connecter';
+  $('#acc-reset').classList.toggle('hidden', signup);
+  $('#acc-pass').autocomplete = signup ? 'new-password' : 'current-password';
+  accMsg('');
+}
+$$('#auth-tabs button').forEach(b => b.onclick = () => setAuthMode(b.dataset.v));
+$('#acc-eye').onclick = () => {
+  const p = $('#acc-pass'), show = p.type === 'password';
+  p.type = show ? 'text' : 'password';
+  setIcon($('#acc-eye'), show ? 'eye-off' : 'eye');
+  $('#acc-eye').setAttribute('aria-label', show ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+};
 // Vrai formulaire : l'iPhone propose d'enregistrer le mot de passe et le remplit ensuite avec Face ID.
-$('#acc-out').addEventListener('submit', async (e) => {
+$('#acc-out').addEventListener('submit', (e) => {
   e.preventDefault();
-  const c = creds(); if (!c) return; accMsg('Connexion…');
-  const { error } = await sb.auth.signInWithPassword(c);
-  if (error) return accMsg(frErr(error));
-  if (isIOS && !isInstalled) setTimeout(installHelp, 400);
-  accMsg(isIOS && !isInstalled
-    ? 'Connecté. Pour rester connecté, installe l\'appli sur l\'écran d\'accueil (Partager puis « Sur l\'écran d\'accueil ») et connecte-toi une fois dedans.'
-    : 'Connecté. Tu resteras connecté sur cet appareil.');
-  $('#acc-pass').value = '';
+  const c = creds(); if (!c) return;
+  busy($('#acc-login'), async () => {
+    if (authMode === 'signup') {
+      const { data, error } = await sb.auth.signUp({ ...c, options: { emailRedirectTo: location.origin + location.pathname } });
+      if (error) return accMsg(frErr(error), 'error');
+      if (!data.session) {
+        setAuthMode('login'); $('#acc-email').value = c.email;
+        return accMsg(`Compte créé ! Ouvre l'email envoyé à ${c.email} et touche le lien de confirmation, puis reviens ici pour te connecter.`, 'success');
+      }
+      return;
+    }
+    const { error } = await sb.auth.signInWithPassword(c);
+    if (error) return accMsg(frErr(error), 'error');
+    $('#acc-pass').value = '';
+    toast('Connecté');
+    if (isIOS && !isInstalled) setTimeout(installHelp, 400);
+  });
 });
-$('#acc-signup').onclick = async () => {
-  const c = creds(); if (!c) return; accMsg('Création du compte…');
-  const { data, error } = await sb.auth.signUp({ ...c, options: { emailRedirectTo: location.origin + location.pathname } });
-  if (error) return accMsg(frErr(error));
-  accMsg(data.session ? 'Compte créé et connecté.' : 'Compte créé ! Clique sur le lien reçu par email, puis reviens ici et connecte-toi.');
+$('#acc-reset').onclick = (e) => {
+  if (!sb) return accMsg('La sauvegarde en ligne n\'est pas configurée.', 'error');
+  const email = $('#acc-email').value.trim();
+  if (!email) { $('#acc-email').focus(); return accMsg('Entre ton email ci-dessus, puis touche à nouveau « Mot de passe oublié ? ».', 'info'); }
+  busy(e.currentTarget, async () => {
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+    accMsg(error ? frErr(error) : `Si un compte existe pour ${email}, un email vient d'être envoyé. Rien reçu ? Vérifie l'adresse et regarde dans les spams.`, error ? 'error' : 'success');
+  });
 };
-$('#acc-reset').onclick = async () => {
-  if (!sb) return accMsg('La sauvegarde en ligne n\'est pas configurée.');
-  const email = $('#acc-email').value.trim(); if (!email) return accMsg('Entre ton email ci-dessus.');
-  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-  accMsg(error ? frErr(error) : `Si un compte existe pour ${email}, un email vient d'être envoyé. Rien reçu ? Vérifie l'adresse et regarde dans les spams.`);
-};
-$('#acc-sync').onclick = async () => { accMsg('Synchronisation…'); await loadTeams(); await sync(); await loadMembers(); renderAccount(); renderHome(); accMsg(''); };
+$('#acc-sync').onclick = (e) => busy(e.currentTarget, async () => {
+  await loadTeams(); await sync(); await loadMembers(); renderAccount(); renderHome();
+  toast(navigator.onLine ? 'Textes à jour' : 'Pas de connexion : synchro au retour du réseau');
+});
 $('#acc-logout').onclick = async () => {
   const choice = await modal({
     title: 'Se déconnecter ?', icon: 'logout',
@@ -1502,17 +1575,23 @@ $('#team-share').onclick = async () => {
   const t = team.current(); if (!t) return;
   const url = inviteUrl(t.code_invitation);
   const text = `Rejoins l'équipe « ${t.nom} » sur Prompteur. Ouvre ce lien (code d'invitation : ${t.code_invitation}) :`;
-  try {
-    if (navigator.share) await navigator.share({ title: 'Prompteur', text, url });
-    else { await navigator.clipboard.writeText(text + ' ' + url); toast('Invitation copiée'); }
-  } catch {}
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Prompteur', text, url }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(text + ' ' + url); toast('Lien d\'invitation copié'); return; } catch {}
+  // dernier recours : on affiche le lien à recopier
+  modal({ title: 'Lien d\'invitation', icon: 'share', message: `${url}\n\nCode : ${t.code_invitation}`, buttons: [{ label: 'OK', value: true }] });
 };
-$('#team-newcode').onclick = async () => {
+$('#team-newcode').onclick = async (e) => {
+  const btn = e.currentTarget;
   const t = team.current(); if (!t) return;
   if (!await confirmModal('Nouveau code d\'invitation ?', 'L\'ancien code ne fonctionnera plus. Les membres déjà dans l\'équipe ne sont pas concernés.', 'Créer un nouveau code', { icon: 'refresh' })) return;
-  const { data, error } = await sb.rpc('prompteur_nouveau_code', { p_equipe: t.id });
-  if (error) return accMsg(frErr(error));
-  t.code_invitation = data; team.save(); renderAccount();
+  await busy(btn, async () => {
+    const { data, error } = await sb.rpc('prompteur_nouveau_code', { p_equipe: t.id });
+    if (error) return accMsg(frErr(error));
+    t.code_invitation = data; team.save(); renderAccount(); toast('Nouveau code créé');
+  });
 };
 async function joinWithCode(code) {
   if (!session) return false;
@@ -1526,10 +1605,10 @@ async function joinWithCode(code) {
   toast(`Bienvenue dans l'équipe « ${nom} »`);
   return true;
 }
-$('#join-btn').onclick = () => {
+$('#join-btn').onclick = (e) => {
   const code = $('#join-code').value.trim().toUpperCase();
   if (code.length < 4) return accMsg('Entre le code d\'invitation donné par ton admin.');
-  joinWithCode(code);
+  busy(e.currentTarget, () => joinWithCode(code));
 };
 
 /* --- lien d'invitation : …/?rejoindre=CODE --- */
@@ -1583,14 +1662,17 @@ async function handleInvite() {
     else { $('#join-code').value = code; }
   } finally { inviteBusy = false; }
 }
-$('#team-create').onclick = async () => {
+$('#team-create').onclick = async (e) => {
+  const btn = e.currentTarget;
   const nom = await promptModal('Nouvelle équipe', 'Tu en seras l\'admin. Tu pourras inviter tes musiciens avec son code.', 'Créer l\'équipe',
     { placeholder: 'Nom de l\'équipe (ex : Mon groupe)', icon: 'users', min: 1, minMsg: 'Donne un nom à l\'équipe' });
   if (!nom) return;
-  const { data, error } = await sb.rpc('prompteur_creer_equipe', { p_nom: nom });
-  if (error) return accMsg(frErr(error));
-  await loadTeams(); await selectTeam(data);
-  accMsg(`Équipe « ${nom} » créée. Tu en es l'admin.`);
+  await busy(btn, async () => {
+    const { data, error } = await sb.rpc('prompteur_creer_equipe', { p_nom: nom });
+    if (error) return accMsg(frErr(error));
+    await loadTeams(); await selectTeam(data);
+    accMsg(`Équipe « ${nom} » créée. Tu en es l'admin.`);
+  });
 };
 $('#team-leave').onclick = async () => {
   const t = team.current(); if (!t) return;
@@ -1633,7 +1715,8 @@ if (sb) {
         if (visible('v-account')) { await loadMembers(); renderAccount(); }
       }, 0);
     }
-    if (!s && event === 'INITIAL_SESSION') { setTimeout(handleInvite, 0); bootDone(); }
+    if (!s && event === 'INITIAL_SESSION') { setTimeout(handleInvite, 0); bootDone(); maybeWelcome(); }
+    if (s) store.set('pr_notice_vu', true);
     if (!s && event !== 'INITIAL_SESSION') disconnectTeam();
     renderAccount(); renderHome();
   });
@@ -1648,6 +1731,7 @@ $('#acc-export').onclick = () => {
   a.download = `prompteur-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(`Sauvegarde créée (${data.textes.length} texte${data.textes.length > 1 ? 's' : ''})`);
 };
 $('#acc-importfile').addEventListener('change', async (e) => {
   const f = e.target.files[0]; if (!f || !canEdit()) return;
@@ -1819,7 +1903,7 @@ function sendState() {
 
 /* côté téléphone télécommande */
 $('#btn-remote').onclick = () => {
-  RC.target = null; RC.last = null;
+  RC.target = null; RC.last = null; RC.openedAt = Date.now();
   show('v-remote');
   connectTeam();
   renderRemote();
@@ -1905,7 +1989,11 @@ function renderRemote() {
       li.onclick = () => { RC.target = key; RC.last = RC.states[key] || null; RC.lastSeen = Date.now(); ping(key); renderRemote(); };
       ul.appendChild(li);
     }
-    $('#rc-none').classList.toggle('hidden', !TC.ready || entries.length > 0);
+    // tant que la connexion s'établit et que les appareils ne se sont pas encore annoncés : squelette
+    const searching = !TC.ready || (!entries.length && Date.now() - (RC.openedAt || 0) < 3500);
+    if (searching && !entries.length) ul.innerHTML = skeleton(2);
+    $('#rc-none').classList.toggle('hidden', searching || entries.length > 0);
+    if (searching && !entries.length) setTimeout(renderRemote, 900);
     return;
   }
   $('#rc-list-view').classList.add('hidden'); $('#rc-pad').classList.remove('hidden');
@@ -2006,7 +2094,7 @@ Et voilà, c'est à toi !
 }
 renderHome();
 renderAccount();
-if (!sb) bootDone();
+if (!sb) { bootDone(); setTimeout(maybeWelcome, 0); }
 
 /* ================= MODE D'EMPLOI ================= */
 const DEMO_ID = 'demo-mode-emploi';
@@ -2063,7 +2151,7 @@ $('#s-stage').onclick = () => stageChecklist();
 $('#help-stage').onclick = () => stageChecklist();
 
 /* --- retours des testeurs --- */
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v24';
 function deviceLabel(ua) {
   const ios = ua.match(/OS (\d+)_(\d+)/);
   if (/iPhone/.test(ua)) return 'iPhone' + (ios ? ` iOS ${ios[1]}.${ios[2]}` : '');
@@ -2099,46 +2187,75 @@ async function loadFeedback() {
   fbOwner = !own.error && own.data && own.data.length > 0;
   $('#fb-owner').classList.toggle('hidden', !fbOwner);
   if (!fbOwner) return;
+  const ul = $('#fb-list');
+  if (!ul.children.length || ul.querySelector('.empty')) ul.innerHTML = skeleton(2);
   const { data, error } = await sb.from('prompteur_retours').select('*').order('created_at', { ascending: false }).limit(200);
-  if (error) return;
-  const todo = data.filter(r => !r.traite);
+  if (error) { ul.innerHTML = `<p class="empty">${esc(frErr(error))}</p>`; return; }
+  const todo = data.filter(r => !r.traite), done = data.filter(r => r.traite);
   $('#fb-count').textContent = todo.length ? todo.length : '';
   $('#fb-count').classList.toggle('hidden', !todo.length);
-  const rows = data.filter(r => fbTab === 'new' ? !r.traite : r.traite);
-  const ul = $('#fb-list'); ul.innerHTML = '';
+  $('#fb-clear').classList.toggle('hidden', fbTab !== 'done' || !done.length);
+  const rows = fbTab === 'new' ? todo : done;
+  ul.innerHTML = '';
   if (!rows.length) ul.innerHTML = `<p class="empty">${fbTab === 'new' ? 'Aucun retour à traiter.' : 'Aucun retour traité.'}</p>`;
   for (const r of rows) {
     const li = document.createElement('li');
     li.className = 'fb-item';
     li.innerHTML = `<div class="li-main"><div class="fb-meta"></div><div class="fb-msg"></div></div>
-      <button class="li-small" aria-label="${r.traite ? 'Remettre à traiter' : 'Marquer comme traité'}">${ic(r.traite ? 'refresh' : 'check')}</button>`;
+      <div class="fb-actions">
+        <button class="li-small" data-a="toggle" aria-label="${r.traite ? 'Remettre à traiter' : 'Marquer comme traité'}">${ic(r.traite ? 'refresh' : 'check')}</button>
+        ${r.traite ? `<button class="li-small danger" data-a="del" aria-label="Supprimer ce retour">${ic('trash')}</button>` : ''}
+      </div>`;
     const quand = new Date(r.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
     li.querySelector('.fb-meta').textContent = `${quand} · ${r.email || 'anonyme'} · ${deviceLabel(r.appareil || '')}` + (r.contexte && r.contexte.version ? ` · ${r.contexte.version}` : '');
     li.querySelector('.fb-msg').textContent = r.message;
-    li.querySelector('button').onclick = async () => {
+    li.querySelector('[data-a=toggle]').onclick = (e) => busy(e.currentTarget, async () => {
       const { error: e2 } = await sb.from('prompteur_retours').update({ traite: !r.traite }).eq('id', r.id);
       if (e2) return toast(frErr(e2));
-      loadFeedback();
+      toast(r.traite ? 'Remis à traiter' : 'Marqué comme traité');
+      await loadFeedback();
+    });
+    const del = li.querySelector('[data-a=del]');
+    if (del) del.onclick = async (e) => {
+      const btn = e.currentTarget;
+      if (!await confirmModal('Supprimer ce retour ?', 'Il sera effacé définitivement.', 'Supprimer', { danger: true })) return;
+      await busy(btn, async () => {
+        const { error: e2 } = await sb.from('prompteur_retours').delete().eq('id', r.id);
+        if (e2) return toast(frErr(e2));
+        toast('Retour supprimé');
+        await loadFeedback();
+      });
     };
     ul.appendChild(li);
   }
 }
+$('#fb-clear').onclick = async (e) => {
+  const btn = e.currentTarget;
+  if (!await confirmModal('Vider les retours traités ?', 'Tous les retours marqués comme traités seront effacés définitivement. Ceux à traiter sont gardés.', 'Tout supprimer', { danger: true })) return;
+  await busy(btn, async () => {
+    const { error } = await sb.from('prompteur_retours').delete().eq('traite', true);
+    if (error) return toast(frErr(error));
+    toast('Retours traités supprimés');
+    await loadFeedback();
+  });
+};
 $$('#fb-tabs button').forEach(b => b.onclick = () => {
   fbTab = b.dataset.v; $$('#fb-tabs button').forEach(x => x.classList.toggle('on', x === b)); loadFeedback();
 });
 
-// Première ouverture : on propose la notice (sauf si on arrive par un lien d'invitation).
-if (!store.get('pr_notice_vu', false)) {
-  store.set('pr_notice_vu', true);
-  setTimeout(() => {
-    if (store.get('pr_invite', null) || modalResolve) return;
-    modal({
-      title: 'Bienvenue sur Prompteur', icon: 'help',
-      message: 'Ton texte défile tout seul pendant que tu chantes ou que tu parles. Jette un œil au mode d\'emploi pour démarrer en 2 minutes.',
-      buttons: [{ label: 'Lire le mode d\'emploi', value: true }, { label: 'Plus tard', value: false, style: 'ghost' }]
-    }).then(v => { if (v) show('v-help'); });
-  }, 700);
+// Premier lancement : page de bienvenue (pas pour un compte déjà connecté ni via un lien d'invitation).
+function maybeWelcome() {
+  if (store.get('pr_notice_vu', false) || session || store.get('pr_invite', null)) return;
+  show('v-welcome', false);
 }
+function endWelcome(next) {
+  store.set('pr_notice_vu', true);
+  show('v-home', false); renderHome();
+  if (next === 'signup' || next === 'login') { openAccount(); setAuthMode(next); setTimeout(() => $('#acc-email').focus(), 250); }
+}
+$('#wl-signup').onclick = () => endWelcome('signup');
+$('#wl-login').onclick = () => endWelcome('login');
+$('#wl-skip').onclick = () => endWelcome('skip');
 
 /* ================= MÉMOIRE DE L'APPAREIL ================= */
 // Sur iPhone, Safari en navigation privée ou avec « Bloquer tous les cookies » n'enregistre rien :

@@ -49,10 +49,34 @@
     <symbol id="i-sections" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></symbol>
     <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h7M8.5 14.5h4"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.6 3.5M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-logo" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#18181c" stroke="none"/><rect x="14" y="17" width="34" height="4.5" rx="2.25" fill="#6e6e78" stroke="none"/><rect x="14" y="25" width="26" height="4.5" rx="2.25" fill="#6e6e78" stroke="none"/><rect x="14" y="33" width="36" height="4.5" rx="2.25" fill="#fff" stroke="none"/><rect x="14" y="41" width="20" height="4.5" rx="2.25" fill="#6e6e78" stroke="none"/><path d="M6 35.25h52" stroke="#ff5a36" stroke-width="1.6"/><path d="M5 31.5l5 3.75-5 3.75zM59 31.5l-5 3.75 5 3.75z" fill="#ff5a36" stroke="none"/></symbol>
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
   </defs>
 </svg>
+
+<!-- ============ BIENVENUE (premier lancement) ============ -->
+<section id="v-welcome" class="view welcome hidden">
+  <div class="welcome-body">
+    <svg class="welcome-logo" aria-hidden="true"><use href="#i-logo"/></svg>
+    <h1 class="welcome-title">Prompteur</h1>
+    <p class="welcome-tag">Tes paroles et tes discours défilent tout seuls, sur scène comme au mariage.</p>
+    <ul class="welcome-points">
+      <li><span class="wp-ic"><svg class="ic"><use href="#i-play"/></svg></span><div><b>Défilement fluide</b><span>Accords, sections, vitesse mémorisée pour chaque chanson.</span></div></li>
+      <li><span class="wp-ic"><svg class="ic"><use href="#i-remote"/></svg></span><div><b>Setlists et télécommande</b><span>Enchaîne les morceaux, pilote depuis un autre téléphone.</span></div></li>
+      <li><span class="wp-ic"><svg class="ic"><use href="#i-users"/></svg></span><div><b>Toute l'équipe synchronisée</b><span>Un admin gère les textes, les musiciens suivent.</span></div></li>
+    </ul>
+  </div>
+  <div class="welcome-actions">
+    <button class="primary big" id="wl-signup">Créer un compte</button>
+    <button class="secondary big" id="wl-login">J'ai déjà un compte</button>
+    <button class="link-btn" id="wl-skip">Continuer sans compte</button>
+  </div>
+</section>
 
 <!-- ============ BIBLIOTHÈQUE ============ -->
 <section id="v-home" class="view">
@@ -210,13 +234,31 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
     <span class="spacer"></span>
   </header>
   <div class="edit-body">
-    <form id="acc-out" action="#" method="post" autocomplete="on" novalidate>
-      <p class="muted">Connecte-toi une seule fois : tu restes connecté ensuite. Tu retrouves les textes de ton équipe sur tous tes appareils et tu peux utiliser la télécommande. Sans compte, tout reste sur cet appareil.</p>
-      <input type="email" id="acc-email" name="email" placeholder="Email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="email">
-      <input type="password" id="acc-pass" name="password" placeholder="Mot de passe (6 caractères min.)" autocomplete="current-password">
-      <button class="primary" id="acc-login" type="submit">Se connecter</button>
-      <button class="secondary" id="acc-signup" type="button">Créer un compte</button>
-      <button class="link-btn" id="acc-reset" type="button">Mot de passe oublié ?</button>
+    <form id="acc-out" class="auth" action="#" method="post" autocomplete="on" novalidate>
+      <div class="auth-head">
+        <svg class="auth-logo" aria-hidden="true"><use href="#i-logo"/></svg>
+        <h2 id="auth-title">Content de te revoir</h2>
+        <p class="muted" id="auth-sub">Connecte-toi pour retrouver les textes de ton équipe.</p>
+      </div>
+      <div class="seg" id="auth-tabs" role="tablist">
+        <button type="button" data-v="login" class="on" role="tab">Connexion</button>
+        <button type="button" data-v="signup" role="tab">Créer un compte</button>
+      </div>
+      <label class="field">
+        <span class="field-label">Email</span>
+        <span class="field-box"><svg class="ic"><use href="#i-mail"/></svg>
+          <input type="email" id="acc-email" name="email" placeholder="toi@exemple.fr" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="email"></span>
+      </label>
+      <label class="field">
+        <span class="field-label">Mot de passe</span>
+        <span class="field-box"><svg class="ic"><use href="#i-lock"/></svg>
+          <input type="password" id="acc-pass" name="password" placeholder="6 caractères minimum" autocomplete="current-password">
+          <button type="button" class="field-eye" id="acc-eye" aria-label="Afficher le mot de passe"><svg class="ic"><use href="#i-eye"/></svg></button></span>
+      </label>
+      <button class="link-btn auth-forgot" id="acc-reset" type="button">Mot de passe oublié ?</button>
+      <p class="alert hidden" id="acc-msg" role="status"></p>
+      <button class="primary big" id="acc-login" type="submit">Se connecter</button>
+      <p class="muted small auth-foot">Tu te connectes une seule fois : tu restes connecté ensuite. Sans compte, l'appli marche aussi, mais tout reste sur cet appareil.</p>
     </form>
 
     <div id="acc-in" class="hidden">
@@ -262,12 +304,13 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
         <h3>Retours des testeurs <span class="badge admin" id="fb-count"></span></h3>
         <div class="seg" id="fb-tabs"><button data-v="new" class="on">À traiter</button><button data-v="done">Traités</button></div>
         <ul class="list flat-list" id="fb-list"></ul>
+        <button class="secondary danger-text hidden" id="fb-clear"><svg class="ic"><use href="#i-trash"/></svg>Vider les retours traités</button>
       </div>
 
       <button class="secondary" id="acc-sync"><svg class="ic"><use href="#i-refresh"/></svg>Synchroniser maintenant</button>
       <button class="secondary" id="acc-logout"><svg class="ic"><use href="#i-logout"/></svg>Se déconnecter</button>
     </div>
-    <p class="msg" id="acc-msg"></p>
+    <p class="msg" id="acc-msg2"></p>
     <hr>
     <h3>Sauvegarde</h3>
     <button class="secondary" id="acc-export">Exporter les textes (fichier)</button>

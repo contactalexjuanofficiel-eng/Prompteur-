@@ -167,3 +167,4 @@ create policy "retours_insert" on public.prompteur_retours for insert to anon, a
 create policy "retours_select" on public.prompteur_retours for select to authenticated using (prompteur_prive.est_proprietaire());
 create policy "retours_update" on public.prompteur_retours for update to authenticated using (prompteur_prive.est_proprietaire()) with check (prompteur_prive.est_proprietaire());
 -- puis : insert into public.prompteur_proprietaires (user_id) select id from auth.users where email = '<email du propriétaire>';
+create policy "retours_delete" on public.prompteur_retours for delete to authenticated using (prompteur_prive.est_proprietaire());

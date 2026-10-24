@@ -429,3 +429,100 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .install-banner { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .sk, #btn-account.syncing::after, .list.appear li { animation: none; } }
+
+/* ---------- pas de « tirer pour recharger » ni de rebond de la page entière ---------- */
+html, body { overflow: hidden; overscroll-behavior: none; position: fixed; inset: 0; width: 100%; }
+.tab-panel, .edit-body, .rc-pad, .settings, .sheet-card .list, .imp-body, .modal-card { overscroll-behavior: contain; }
+
+/* ---------- boutons occupés ---------- */
+.is-busy { position: relative; color: transparent !important; pointer-events: none; }
+.is-busy > * { visibility: hidden; }
+.is-busy::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+  border-radius: 50%; border: 2px solid rgba(255, 255, 255, .35); border-top-color: #fff; animation: spin .7s linear infinite;
+}
+.secondary.is-busy::after, .icon-btn.is-busy::after, .li-small.is-busy::after { border-color: rgba(255, 255, 255, .2); border-top-color: var(--accent); }
+#acc-in.loading #team-card { opacity: .55; }
+.fb-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.li-small.danger { color: var(--danger); }
+.danger-text { color: var(--danger); }
+
+/* ---------- page de bienvenue ---------- */
+.welcome {
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(255, 90, 54, .18), transparent 60%),
+    var(--bg);
+  padding: var(--safe-t) var(--safe-r) 0 var(--safe-l);
+}
+.welcome-body {
+  flex: 1; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  padding: 32px 24px 16px; gap: 12px; max-width: 520px; width: 100%; margin: 0 auto;
+}
+.welcome-body > * { flex-shrink: 0; }
+.welcome-logo { width: 88px; height: 88px; filter: drop-shadow(0 12px 30px rgba(255, 90, 54, .35)); }
+.welcome-title { margin: 8px 0 0; font-size: 34px; font-weight: 800; letter-spacing: -.5px; }
+.welcome-tag { margin: 0 0 12px; color: var(--muted); font-size: 17px; line-height: 1.45; max-width: 360px; }
+.welcome-points { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; width: 100%; text-align: left; }
+.welcome-points li { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+.welcome-points b { display: block; font-size: 16px; margin-bottom: 2px; }
+.welcome-points span:not(.wp-ic) { color: var(--muted); font-size: 14px; line-height: 1.4; }
+.wp-ic { width: 40px; height: 40px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; background: rgba(255, 90, 54, .14); color: var(--accent); }
+.wp-ic .ic { width: 20px; height: 20px; }
+.welcome-actions { padding: 12px 24px calc(16px + var(--safe-b)); display: flex; flex-direction: column; gap: 10px; max-width: 520px; width: 100%; margin: 0 auto; }
+.welcome-actions .link-btn { align-self: center; color: var(--muted); }
+
+/* ---------- connexion / inscription ---------- */
+.auth { display: flex; flex-direction: column; gap: 14px; padding-top: 8px; }
+.auth-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; margin-bottom: 4px; }
+.auth-logo { width: 64px; height: 64px; margin-bottom: 6px; }
+.auth-head h2 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.3px; }
+.auth-head p { margin: 0; font-size: 15px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 13px; font-weight: 600; color: var(--muted); padding-left: 2px; }
+.field-box {
+  display: flex; align-items: center; gap: 10px; padding: 0 6px 0 14px; height: 52px;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--card); transition: border-color .15s;
+}
+.field-box:focus-within { border-color: var(--accent); }
+.field-box > .ic { color: var(--muted); width: 20px; height: 20px; }
+.field-box input { flex: 1; min-width: 0; border: 0 !important; background: none !important; padding: 0 !important; height: 100%; outline: none; font-size: 16px; }
+.field-eye { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--muted); flex: none; }
+.field-eye:active { background: var(--card2); }
+.auth-forgot { align-self: flex-end; font-size: 15px; margin-top: -6px; }
+.auth-foot { text-align: center; margin: 2px 0 0; line-height: 1.45; }
+.alert { margin: 0; padding: 12px 14px; border-radius: 12px; font-size: 14px; line-height: 1.45; background: var(--card2); color: var(--text); }
+.alert.error { background: rgba(255, 77, 79, .12); color: #ff8a8c; border: 1px solid rgba(255, 77, 79, .3); }
+.alert.success { background: rgba(61, 220, 132, .1); color: #7ee7a8; border: 1px solid rgba(61, 220, 132, .3); }
+/* bienvenue : centré sans jamais couper le haut, plus compact */
+.welcome-body { justify-content: flex-start; gap: 10px; padding-top: 24px; }
+.welcome-body > :first-child { margin-top: auto; }
+.welcome-body > :last-child { margin-bottom: auto; }
+.welcome-logo { width: 76px; height: 76px; }
+.welcome-title { font-size: 32px; margin-top: 4px; }
+.welcome-tag { font-size: 16px; margin-bottom: 6px; }
+.welcome-points li { padding: 12px 14px; gap: 12px; }
+.welcome-points b { font-size: 15px; }
+.welcome-points span:not(.wp-ic) { font-size: 13.5px; }
+@media (max-height: 760px) {
+  .welcome-points span:not(.wp-ic) { display: none; }
+  .welcome-logo { width: 64px; height: 64px; }
+  .welcome-title { font-size: 28px; }
+  .welcome-actions { gap: 8px; }
+  .welcome-actions .big { padding: 14px; font-size: 17px; }
+}
+@media (max-height: 620px) {
+  .welcome-points li { padding: 8px 12px; }
+  .wp-ic { width: 32px; height: 32px; border-radius: 10px; }
+  .welcome-logo { width: 56px; height: 56px; }
+  .welcome-tag { font-size: 15px; margin-bottom: 2px; }
+  .welcome-body { gap: 8px; padding-top: 16px; }
+}
+@media (max-height: 620px) {
+  .welcome-points { gap: 6px; margin-top: 4px; }
+  .welcome-logo { width: 48px; height: 48px; }
+  .welcome-title { font-size: 26px; margin-top: 0; }
+  .welcome-body { padding-top: 10px; padding-bottom: 8px; }
+  .welcome-actions { padding-top: 8px; }
+}
+.li-small:disabled { opacity: .3; }
