@@ -82,6 +82,7 @@
   <div class="tab-panel" id="tab-textes">
     <div class="searchrow">
       <input type="search" id="search" placeholder="Rechercher un texte…" autocomplete="off">
+      <button class="icon-btn" id="btn-import" title="Importer plusieurs textes" aria-label="Importer plusieurs textes"><svg class="ic"><use href="#i-file"/></svg></button>
     </div>
     <ul class="list" id="list-textes"></ul>
     <p class="empty hidden" id="empty-textes"></p>
@@ -116,7 +117,7 @@ Astuces :
 // Faire signe au DJ → note visible des admins seulement
 Ligne vide         → espace"></textarea>
     <div class="edit-tools">
-      <label class="file-btn" id="edit-import-btn"><svg class="ic"><use href="#i-file"/></svg>Importer .txt<input type="file" id="edit-import" accept=".txt,text/plain"></label>
+      <label class="file-btn" id="edit-import-btn"><svg class="ic"><use href="#i-file"/></svg>Importer un fichier<input type="file" id="edit-import" accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
       <span class="muted" id="edit-stats"></span>
     </div>
     <label class="duree-row">
@@ -148,6 +149,34 @@ Ligne vide         → espace"></textarea>
     <button class="primary big" id="sl-play"><svg class="ic"><use href="#i-play"/></svg>Lancer la setlist</button>
   </div>
 </section>
+
+<!-- ============ IMPORT EN MASSE ============ -->
+<div id="import-sheet" class="sheet hidden">
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <b>Importer des textes</b>
+      <button class="link-btn" id="imp-close">Fermer</button>
+    </div>
+    <div class="imp-body">
+      <label class="secondary file-btn block"><svg class="ic"><use href="#i-file"/></svg>Choisir des fichiers (.txt, Word, PDF)<input type="file" id="imp-files" multiple accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
+      <p class="muted small">Un fichier = un texte, le nom du fichier devient le titre. Tu peux en choisir plusieurs d'un coup.</p>
+      <div class="imp-or">ou</div>
+      <textarea id="imp-paste" placeholder="Colle ici plusieurs chansons, séparées par une ligne ---
+
+Perfect
+I found a love for me…
+---
+Hallelujah
+I heard there was a secret chord…
+
+La 1re ligne de chaque bloc devient le titre."></textarea>
+      <p class="msg" id="imp-msg"></p>
+      <ul class="list flat-list" id="imp-list"></ul>
+      <label class="check imp-check hidden" id="imp-sl-row"><input type="checkbox" id="imp-setlist"> Créer aussi une setlist avec ces textes</label>
+      <button class="primary" id="imp-go" disabled>Importer</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============ HISTORIQUE D'UN TEXTE ============ -->
 <div id="hist-sheet" class="sheet hidden">
@@ -278,6 +307,7 @@ Ligne vide         → espace"></textarea>
         <li><code>// Faire signe au DJ</code> : note visible seulement par les admins.</li>
         <li>Une ligne vide : un espace.</li>
       </ul>
+      <p><b>Importer plusieurs textes d'un coup :</b> touche <svg class="ic inline"><use href="#i-file"/></svg> à côté de la recherche. Choisis des fichiers .txt, Word ou PDF (un fichier = un texte), ou colle plusieurs chansons séparées par une ligne <code>---</code>. Tu peux créer une setlist avec en même temps.</p>
       <p><b>Durée</b> (facultatif, ex : <code>3:40</code>) : le défilement se cale pour finir pile à la fin, et le minuteur l'utilise.</p>
     </details>
 

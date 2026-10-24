@@ -192,6 +192,7 @@ function renderHome() {
   chip.classList.toggle('hidden', !session || !t);
   if (session && t) chip.innerHTML = ic('users') + esc(t.nom) + (t.role === 'admin' ? ' · admin' : '');
   $('#fab').classList.toggle('hidden', !edit);
+  $('#btn-import').classList.toggle('hidden', !edit);
 
   const q = $('#search').value.trim().toLowerCase();
   const textes = liveTextes()
@@ -307,7 +308,8 @@ $('#edit-duree').addEventListener('blur', () => {
 }));
 $('#edit-import').addEventListener('change', async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  const txt = await f.text();
+  let txt;
+  try { txt = await readFileText(f); } catch (err) { e.target.value = ''; return toast(err.message || 'Fichier illisible'); }
   const area = $('#edit-contenu');
   area.value = area.value ? area.value + '\n\n' + txt : txt;
   if (!$('#edit-titre').value) $('#edit-titre').value = f.name.replace(/\.[^.]+$/, '');
@@ -365,6 +367,153 @@ $('#edit-play').addEventListener('click', () => {
   if (!t || !t.contenu.trim()) return toast('Écris d\'abord ton texte');
   startPrompter([t.id], 0);
 });
+
+/* ================= IMPORT (fichiers .txt / Word / PDF, ou texte collé) ================= */
+const baseName = (n) => n.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
+const SEP_RE = /^\s*-{3,}\s*$/m;
+
+// « Titre\ntexte\n---\nTitre 2\ntexte… » → [{titre, contenu}]
+function splitTexts(raw, fallbackTitle) {
+  const txt = (raw || '').replace(/\r\n?/g, '\n');
+  if (!SEP_RE.test(txt) && fallbackTitle) return txt.trim() ? [{ titre: fallbackTitle, contenu: txt.trim() }] : [];
+  return txt.split(/^\s*-{3,}\s*$/m).map(b => b.replace(/^\n+|\n+$/g, '')).filter(b => b.trim()).map(b => {
+    const lines = b.split('\n');
+    const i = lines.findIndex(l => l.trim());
+    const titre = lines[i].replace(/^\s*#+\s*/, '').trim().slice(0, 120);
+    return { titre, contenu: lines.slice(i + 1).join('\n').replace(/^\n+/, '').trim() };
+  });
+}
+
+// Lecture d'un fichier Word (.docx) : c'est un zip, on y lit word/document.xml.
+async function inflateRaw(bytes) {
+  if (!('DecompressionStream' in window)) throw new Error('Ton navigateur ne sait pas lire les fichiers Word. Mets à jour ton téléphone ou copie-colle le texte.');
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function docxText(buf) {
+  const b = new Uint8Array(buf), dv = new DataView(buf);
+  let eocd = -1;
+  for (let i = b.length - 22; i >= Math.max(0, b.length - 66000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('Fichier Word illisible');
+  let p = dv.getUint32(eocd + 16, true);
+  const n = dv.getUint16(eocd + 10, true);
+  let entry = null;
+  for (let k = 0; k < n; k++) {
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+    const nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+    const off = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(b.subarray(p + 46, p + 46 + nlen));
+    if (name === 'word/document.xml') { entry = { method, csize, off }; break; }
+    p += 46 + nlen + xlen + clen;
+  }
+  if (!entry) throw new Error('Ce fichier Word ne contient pas de texte');
+  const lh = entry.off, start = lh + 30 + dv.getUint16(lh + 26, true) + dv.getUint16(lh + 28, true);
+  const data = b.subarray(start, start + entry.csize);
+  const xml = new TextDecoder().decode(entry.method === 8 ? await inflateRaw(data) : data);
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const out = [];
+  for (const para of doc.getElementsByTagNameNS(W, 'p')) {
+    let line = '';
+    for (const node of para.getElementsByTagNameNS(W, '*')) {
+      if (node.localName === 't') line += node.textContent;
+      else if (node.localName === 'tab') line += ' ';
+      else if (node.localName === 'br' || node.localName === 'cr') line += '\n';
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+// Lecture d'un PDF avec pdf.js (chargé seulement quand on en a besoin).
+let pdfLib = null;
+function loadPdfLib() {
+  if (pdfLib) return pdfLib;
+  pdfLib = new Promise((resolve, reject) => {
+    const sc = document.createElement('script');
+    sc.src = 'vendor/pdfjs/pdf.min.js';
+    sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js'; resolve(window.pdfjsLib); };
+    sc.onerror = () => { pdfLib = null; reject(new Error('Lecture des PDF indisponible (pas de connexion ?)')); };
+    document.head.appendChild(sc);
+  });
+  return pdfLib;
+}
+async function pdfText(buf) {
+  const lib = await loadPdfLib();
+  const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    let txt = '';
+    for (const it of tc.items) { txt += it.str; if (it.hasEOL) txt += '\n'; }
+    pages.push(txt.replace(/[ \t]+\n/g, '\n').trim());
+  }
+  const all = pages.join('\n\n').trim();
+  if (!all) throw new Error('Ce PDF ne contient pas de texte (c\'est peut-être une image scannée)');
+  return all;
+}
+async function readFileText(f) {
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'docx') return docxText(await f.arrayBuffer());
+  if (ext === 'pdf') return pdfText(await f.arrayBuffer());
+  if (ext === 'doc') throw new Error('Ancien format Word (.doc) : enregistre-le en .docx');
+  return f.text();
+}
+
+let impFiles = [];
+function impAll() { return impFiles.concat(splitTexts($('#imp-paste').value, null)); }
+function renderImport() {
+  const items = impAll();
+  const ul = $('#imp-list'); ul.innerHTML = '';
+  items.forEach(x => {
+    const li = document.createElement('li');
+    li.innerHTML = `${ic('file')}<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div>`;
+    li.querySelector('.li-title').textContent = x.titre || 'Sans titre';
+    const n = x.contenu.split('\n').filter(l => l.trim()).length;
+    li.querySelector('.li-sub').textContent = `${n} ligne${n > 1 ? 's' : ''} · ` + (firstLine(x.contenu) || 'vide');
+    ul.appendChild(li);
+  });
+  $('#imp-go').disabled = !items.length;
+  $('#imp-go').textContent = items.length ? `Importer ${items.length} texte${items.length > 1 ? 's' : ''}` : 'Importer';
+  $('#imp-sl-row').classList.toggle('hidden', items.length < 2);
+}
+$('#btn-import').onclick = () => {
+  if (!canEdit()) return;
+  impFiles = []; $('#imp-paste').value = ''; $('#imp-msg').textContent = ''; $('#imp-setlist').checked = false;
+  renderImport();
+  $('#import-sheet').classList.remove('hidden');
+};
+$('#imp-close').onclick = () => $('#import-sheet').classList.add('hidden');
+$('#import-sheet').addEventListener('click', (e) => { if (e.target.id === 'import-sheet') $('#import-sheet').classList.add('hidden'); });
+$('#imp-paste').addEventListener('input', renderImport);
+$('#imp-files').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files); e.target.value = '';
+  const errs = [];
+  $('#imp-msg').textContent = 'Lecture des fichiers…';
+  for (const f of files) {
+    try { impFiles.push(...splitTexts(await readFileText(f), baseName(f.name))); }
+    catch (err) { errs.push(`${f.name} : ${err.message || 'illisible'}`); }
+  }
+  $('#imp-msg').textContent = errs.join('\n');
+  renderImport();
+});
+$('#imp-go').onclick = () => {
+  const items = impAll(); if (!items.length || !canEdit()) return;
+  const ids = [];
+  for (const x of items) {
+    const t = { id: uuid(), equipe_id: scopeId(), titre: x.titre, contenu: x.contenu, reglages: {}, supprime: false, created_at: nowIso() };
+    db.textes[t.id] = t; t.updated_at = nowIso(); t._dirty = true; ids.push(t.id);
+  }
+  if ($('#imp-setlist').checked && ids.length > 1) {
+    const sl = { id: uuid(), equipe_id: scopeId(), nom: 'Import du ' + new Date().toLocaleDateString('fr-FR'), texte_ids: ids, supprime: false, created_at: nowIso() };
+    db.setlists[sl.id] = sl; sl.updated_at = nowIso(); sl._dirty = true;
+  }
+  db.save(); scheduleSync(300);
+  $('#import-sheet').classList.add('hidden');
+  renderHome();
+  toast(`${ids.length} texte${ids.length > 1 ? 's' : ''} importé${ids.length > 1 ? 's' : ''}`);
+};
 
 /* ================= SETLISTS ================= */
 let slId = null;
