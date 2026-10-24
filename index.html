@@ -17,13 +17,49 @@
 </head>
 <body>
 
+<!-- ============ ICÔNES ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="5.5" y="4" width="4.5" height="16" rx="1.2" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4.5" height="16" rx="1.2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><path d="M19 5v14l-10-7z" fill="currentColor"/><path d="M5 5v14"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 5v14l10-7z" fill="currentColor"/><path d="M19 5v14"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-rewind" viewBox="0 0 24 24"><path d="M11 19 3 12l8-7zM21 19l-8-7 8-7z" fill="currentColor"/></symbol>
+    <symbol id="i-forward" viewBox="0 0 24 24"><path d="m13 19 8-7-8-7zM3 19l8-7-8-7z" fill="currentColor"/></symbol>
+    <symbol id="i-top" viewBox="0 0 24 24"><path d="M5 3h14M12 21V8M6 13l6-6 6 6"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/></symbol>
+    <symbol id="i-remote" viewBox="0 0 24 24"><path d="M2 8.8a15 15 0 0 1 20 0M5 12.6a10 10 0 0 1 14 0M8.5 16.3a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v13M7 8l5-5 5 5M5 13v7h14v-7"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/></symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3 18h18L20 7l-5 4-3-6-3 6-5-4z"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5V3h4M16 17l5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  </defs>
+</svg>
+
 <!-- ============ BIBLIOTHÈQUE ============ -->
 <section id="v-home" class="view">
   <header class="topbar">
-    <h1>Prompteur</h1>
+    <div class="brand">
+      <h1>Prompteur</h1>
+      <button class="team-chip hidden" id="team-chip"></button>
+    </div>
     <div class="topbar-actions">
-      <button class="icon-btn" id="btn-remote" title="Télécommande" aria-label="Télécommande">📡</button>
-      <button class="icon-btn" id="btn-account" title="Compte" aria-label="Compte">👤</button>
+      <button class="icon-btn" id="btn-remote" title="Télécommande" aria-label="Télécommande"><svg class="ic"><use href="#i-remote"/></svg></button>
+      <button class="icon-btn" id="btn-account" title="Compte et équipe" aria-label="Compte et équipe"><svg class="ic"><use href="#i-user"/></svg></button>
     </div>
   </header>
 
@@ -39,26 +75,27 @@
       <input type="search" id="search" placeholder="Rechercher un texte…" autocomplete="off">
     </div>
     <ul class="list" id="list-textes"></ul>
-    <p class="empty hidden" id="empty-textes">Aucun texte pour l'instant.<br>Appuie sur <b>+</b> pour ajouter ta première chanson ou ton discours.</p>
+    <p class="empty hidden" id="empty-textes"></p>
   </div>
 
   <div class="tab-panel hidden" id="tab-setlists">
     <ul class="list" id="list-setlists"></ul>
-    <p class="empty hidden" id="empty-setlists">Aucune setlist.<br>Crée une setlist pour enchaîner tes morceaux pendant un concert ou un mariage.</p>
+    <p class="empty hidden" id="empty-setlists"></p>
   </div>
 
-  <button class="fab" id="fab" aria-label="Ajouter">+</button>
+  <button class="fab" id="fab" aria-label="Ajouter"><svg class="ic"><use href="#i-plus"/></svg></button>
 </section>
 
 <!-- ============ ÉDITEUR DE TEXTE ============ -->
 <section id="v-edit" class="view hidden">
   <header class="topbar">
-    <button class="link-btn" data-back>‹ Retour</button>
+    <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
     <div class="topbar-actions">
-      <button class="link-btn danger" id="edit-delete">Supprimer</button>
+      <button class="link-btn danger" id="edit-delete"><svg class="ic"><use href="#i-trash"/></svg>Supprimer</button>
     </div>
   </header>
   <div class="edit-body">
+    <p class="readonly-note hidden" id="edit-ro">Lecture seule : seuls les admins de l'équipe peuvent modifier les textes.</p>
     <input type="text" id="edit-titre" class="title-input" placeholder="Titre (ex : Perfect – Ed Sheeran)">
     <textarea id="edit-contenu" placeholder="Colle ou écris ton texte ici…
 
@@ -67,31 +104,31 @@ Astuces :
 [Guitare seule]  → indication de scène (en couleur)
 Ligne vide       → espace"></textarea>
     <div class="edit-tools">
-      <label class="file-btn">Importer .txt<input type="file" id="edit-import" accept=".txt,text/plain"></label>
+      <label class="file-btn" id="edit-import-btn"><svg class="ic"><use href="#i-file"/></svg>Importer .txt<input type="file" id="edit-import" accept=".txt,text/plain"></label>
       <span class="muted" id="edit-stats"></span>
     </div>
   </div>
   <div class="bottombar">
-    <button class="primary big" id="edit-play">▶ Lancer le prompteur</button>
+    <button class="primary big" id="edit-play"><svg class="ic"><use href="#i-play"/></svg>Lancer le prompteur</button>
   </div>
 </section>
 
 <!-- ============ ÉDITEUR DE SETLIST ============ -->
 <section id="v-setlist" class="view hidden">
   <header class="topbar">
-    <button class="link-btn" data-back>‹ Retour</button>
+    <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
     <div class="topbar-actions">
-      <button class="link-btn danger" id="sl-delete">Supprimer</button>
+      <button class="link-btn danger" id="sl-delete"><svg class="ic"><use href="#i-trash"/></svg>Supprimer</button>
     </div>
   </header>
   <div class="edit-body">
     <input type="text" id="sl-nom" class="title-input" placeholder="Nom (ex : Mariage Julie & Tom)">
     <ol class="list setlist-items" id="sl-items"></ol>
-    <p class="empty hidden" id="sl-empty">Ajoute des textes à cette setlist.</p>
-    <button class="secondary" id="sl-add">+ Ajouter des textes</button>
+    <p class="empty hidden" id="sl-empty">Aucun texte dans cette setlist.</p>
+    <button class="secondary" id="sl-add"><svg class="ic"><use href="#i-plus"/></svg>Ajouter des textes</button>
   </div>
   <div class="bottombar">
-    <button class="primary big" id="sl-play">▶ Lancer la setlist</button>
+    <button class="primary big" id="sl-play"><svg class="ic"><use href="#i-play"/></svg>Lancer la setlist</button>
   </div>
 </section>
 
@@ -106,74 +143,113 @@ Ligne vide       → espace"></textarea>
   </div>
 </div>
 
-<!-- ============ COMPTE ============ -->
+<!-- ============ COMPTE & ÉQUIPE ============ -->
 <section id="v-account" class="view hidden">
   <header class="topbar">
-    <button class="link-btn" data-back>‹ Retour</button>
-    <h2>Compte</h2>
-    <span></span>
+    <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
+    <h2>Compte et équipe</h2>
+    <span class="spacer"></span>
   </header>
   <div class="edit-body">
     <div id="acc-out">
-      <p class="muted">Connecte-toi pour sauvegarder tes textes dans le cloud et les retrouver sur tous tes appareils (iPhone, iPad, ordinateur). Sans compte, tout reste enregistré sur cet appareil.</p>
+      <p class="muted">Connecte-toi pour retrouver les textes de ton équipe sur tous tes appareils et utiliser la télécommande. Sans compte, tout reste sur cet appareil.</p>
       <input type="email" id="acc-email" placeholder="Email" autocomplete="email" autocapitalize="off">
       <input type="password" id="acc-pass" placeholder="Mot de passe (6 caractères min.)" autocomplete="current-password">
       <button class="primary" id="acc-login">Se connecter</button>
       <button class="secondary" id="acc-signup">Créer un compte</button>
       <button class="link-btn" id="acc-reset">Mot de passe oublié ?</button>
     </div>
+
     <div id="acc-in" class="hidden">
-      <p>Connecté : <b id="acc-who"></b></p>
-      <p class="muted" id="acc-last"></p>
-      <button class="primary" id="acc-sync">Synchroniser maintenant</button>
-      <button class="secondary" id="acc-logout">Se déconnecter</button>
+      <div class="card">
+        <div class="card-row">
+          <svg class="ic muted"><use href="#i-user"/></svg>
+          <div class="grow"><b id="acc-who"></b><div class="muted small" id="acc-last"></div></div>
+        </div>
+      </div>
+
+      <h3>Équipe</h3>
+      <div class="card" id="team-card">
+        <select id="team-select" class="select hidden" aria-label="Équipe active"></select>
+        <div class="card-row">
+          <input type="text" id="team-name" class="title-input flat" placeholder="Nom de l'équipe">
+          <span class="badge" id="team-role"></span>
+        </div>
+        <div id="team-admin" class="hidden">
+          <div class="muted small">Code d'invitation : donne-le à tes musiciens pour qu'ils rejoignent l'équipe.</div>
+          <div class="invite-row">
+            <div class="code" id="team-code"></div>
+            <button class="icon-btn" id="team-share" aria-label="Partager le code"><svg class="ic"><use href="#i-share"/></svg></button>
+            <button class="icon-btn" id="team-newcode" aria-label="Nouveau code"><svg class="ic"><use href="#i-refresh"/></svg></button>
+          </div>
+        </div>
+        <div class="muted small" id="team-member-note"></div>
+      </div>
+
+      <h3>Membres</h3>
+      <ul class="list flat-list" id="team-members"></ul>
+
+      <h3>Autres équipes</h3>
+      <div class="card">
+        <div class="join-row">
+          <input type="text" id="join-code" class="code-input small-code" maxlength="8" placeholder="CODE" autocapitalize="characters" autocomplete="off">
+          <button class="primary auto" id="join-btn">Rejoindre</button>
+        </div>
+        <button class="secondary" id="team-create"><svg class="ic"><use href="#i-plus"/></svg>Créer une nouvelle équipe</button>
+        <button class="link-btn danger hidden" id="team-leave">Quitter cette équipe</button>
+      </div>
+
+      <button class="secondary" id="acc-sync"><svg class="ic"><use href="#i-refresh"/></svg>Synchroniser maintenant</button>
+      <button class="secondary" id="acc-logout"><svg class="ic"><use href="#i-logout"/></svg>Se déconnecter</button>
     </div>
     <p class="msg" id="acc-msg"></p>
     <hr>
     <h3>Sauvegarde</h3>
-    <button class="secondary" id="acc-export">Exporter tout (fichier)</button>
-    <label class="secondary file-btn block">Importer une sauvegarde<input type="file" id="acc-importfile" accept=".json,application/json"></label>
+    <button class="secondary" id="acc-export">Exporter les textes (fichier)</button>
+    <label class="secondary file-btn block" id="acc-import-btn">Importer une sauvegarde<input type="file" id="acc-importfile" accept=".json,application/json"></label>
     <hr>
     <h3>Installer sur iPhone / iPad</h3>
-    <p class="muted">Dans Safari : bouton <b>Partager</b> ⬆︎ puis <b>« Sur l'écran d'accueil »</b>. L'appli s'ouvre alors en plein écran et fonctionne même sans réseau.</p>
+    <p class="muted">Dans Safari : bouton <b>Partager</b> <svg class="ic inline"><use href="#i-share"/></svg> puis <b>« Sur l'écran d'accueil »</b>. L'appli s'ouvre alors en plein écran et fonctionne même sans réseau.</p>
   </div>
 </section>
 
 <!-- ============ TÉLÉCOMMANDE ============ -->
 <section id="v-remote" class="view hidden">
   <header class="topbar">
-    <button class="link-btn" data-back>‹ Retour</button>
+    <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
     <h2>Télécommande</h2>
-    <span></span>
+    <span class="spacer"></span>
   </header>
-  <div class="edit-body" id="rc-connect">
-    <p class="muted">Sur l'appareil qui affiche le prompteur, ouvre les réglages ⚙︎ pour voir son <b>code</b>. Entre-le ici pour piloter le défilement depuis ce téléphone.</p>
-    <input type="text" id="rc-code" class="code-input" maxlength="6" placeholder="CODE" autocapitalize="characters" autocomplete="off">
-    <button class="primary" id="rc-join">Connecter</button>
+  <div class="edit-body" id="rc-list-view">
+    <p class="muted" id="rc-intro">Prompteurs ouverts dans ton équipe. Choisis celui à piloter.</p>
+    <ul class="list flat-list" id="rc-devices"></ul>
+    <p class="empty hidden" id="rc-none">Aucun prompteur ouvert pour l'instant.<br>Lance un texte sur l'iPad ou le téléphone de scène : il apparaîtra ici automatiquement.</p>
+    <button class="primary hidden" id="rc-login">Se connecter à mon équipe</button>
   </div>
   <div class="rc-pad hidden" id="rc-pad">
     <div class="rc-status">
-      <div class="rc-title" id="rc-title">En attente du prompteur…</div>
+      <div class="rc-device" id="rc-device"></div>
+      <div class="rc-title" id="rc-title"></div>
       <div class="rc-sub" id="rc-sub"></div>
       <div class="progress"><div id="rc-prog"></div></div>
     </div>
-    <button class="rc-play" id="rc-play">▶</button>
+    <button class="rc-play" id="rc-play" aria-label="Lecture / pause"><svg class="ic"><use href="#i-play"/></svg></button>
     <div class="rc-row">
-      <button data-rc="speed-">Vitesse −</button>
+      <button data-rc="speed-"><svg class="ic"><use href="#i-minus"/></svg>Vitesse</button>
       <div class="rc-speed" id="rc-speed">–</div>
-      <button data-rc="speed+">Vitesse +</button>
+      <button data-rc="speed+"><svg class="ic"><use href="#i-plus"/></svg>Vitesse</button>
     </div>
     <div class="rc-row">
-      <button data-rc="back">⏪ Reculer</button>
-      <button data-rc="fwd">Avancer ⏩</button>
+      <button data-rc="back"><svg class="ic"><use href="#i-rewind"/></svg>Reculer</button>
+      <button data-rc="fwd">Avancer<svg class="ic"><use href="#i-forward"/></svg></button>
     </div>
     <div class="rc-row">
-      <button data-rc="prev">⏮ Précédent</button>
-      <button data-rc="top">⤒ Début</button>
-      <button data-rc="next">Suivant ⏭</button>
+      <button data-rc="prev"><svg class="ic"><use href="#i-prev"/></svg>Précédent</button>
+      <button data-rc="top"><svg class="ic"><use href="#i-top"/></svg>Début</button>
+      <button data-rc="next">Suivant<svg class="ic"><use href="#i-next"/></svg></button>
     </div>
     <ol class="list rc-songs" id="rc-songs"></ol>
-    <button class="link-btn" id="rc-leave">Déconnecter</button>
+    <button class="link-btn" id="rc-other">Choisir un autre prompteur</button>
   </div>
 </section>
 
@@ -186,26 +262,26 @@ Ligne vide       → espace"></textarea>
   <div id="p-count" class="p-count hidden"></div>
   <div id="p-endcard" class="p-endcard hidden">
     <div id="p-endtitle"></div>
-    <button class="primary big" id="p-endnext">Suivant ▶</button>
+    <button class="primary big" id="p-endnext">Suivant<svg class="ic"><use href="#i-next"/></svg></button>
   </div>
 
   <div id="p-ui" class="p-ui">
     <div class="p-top">
-      <button class="p-btn" id="p-close" aria-label="Fermer">✕</button>
+      <button class="p-btn" id="p-close" aria-label="Fermer"><svg class="ic"><use href="#i-x"/></svg></button>
       <div class="p-info">
         <div id="p-title"></div>
         <div id="p-meta"></div>
       </div>
-      <button class="p-btn" id="p-settings-btn" aria-label="Réglages">⚙︎</button>
+      <button class="p-btn" id="p-settings-btn" aria-label="Réglages"><svg class="ic"><use href="#i-settings"/></svg></button>
     </div>
     <div class="p-bottom">
       <div class="progress"><div id="p-prog"></div></div>
       <div class="p-controls">
-        <button class="p-btn" id="p-prev" aria-label="Précédent">⏮</button>
-        <button class="p-btn" id="p-slower" aria-label="Moins vite">−</button>
-        <button class="p-btn p-main" id="p-play" aria-label="Lecture">▶</button>
-        <button class="p-btn" id="p-faster" aria-label="Plus vite">+</button>
-        <button class="p-btn" id="p-next" aria-label="Suivant">⏭</button>
+        <button class="p-btn" id="p-prev" aria-label="Précédent"><svg class="ic"><use href="#i-prev"/></svg></button>
+        <button class="p-btn" id="p-slower" aria-label="Moins vite"><svg class="ic"><use href="#i-minus"/></svg></button>
+        <button class="p-btn p-main" id="p-play" aria-label="Lecture"><svg class="ic"><use href="#i-play"/></svg></button>
+        <button class="p-btn" id="p-faster" aria-label="Plus vite"><svg class="ic"><use href="#i-plus"/></svg></button>
+        <button class="p-btn" id="p-next" aria-label="Suivant"><svg class="ic"><use href="#i-next"/></svg></button>
       </div>
       <div class="p-speedlabel">Vitesse <b id="p-speed"></b></div>
     </div>
@@ -236,11 +312,11 @@ Ligne vide       → espace"></textarea>
         <label class="check"><input type="checkbox" id="s-showguide"> Afficher la ligne de lecture</label>
         <label class="check"><input type="checkbox" id="s-autonext"> Enchaîner automatiquement (setlist)</label>
         <div class="remote-code">
-          <div class="muted">Code télécommande</div>
-          <div class="code" id="s-code"></div>
-          <div class="muted small" id="s-remote-status">Ouvre 📡 Télécommande sur un autre téléphone.</div>
+          <div class="card-row"><svg class="ic muted"><use href="#i-screen"/></svg><span class="muted">Nom de cet appareil</span></div>
+          <input type="text" id="s-device" placeholder="ex : iPad scène" maxlength="30">
+          <div class="muted small" id="s-remote-status"></div>
         </div>
-        <p class="muted small">Clavier / pédale Bluetooth : Espace = lecture/pause · ↓ / Page suivante = avancer · ↑ / Page précédente = reculer · → / ← = morceau suivant / précédent · + / − = vitesse</p>
+        <p class="muted small">Clavier / pédale Bluetooth : Espace = lecture/pause · flèche bas / Page suivante = avancer · flèche haut / Page précédente = reculer · flèches droite / gauche = morceau suivant / précédent · + / − = vitesse</p>
       </div>
     </div>
   </div>

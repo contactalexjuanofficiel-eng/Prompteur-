@@ -1,6 +1,7 @@
 /* Prompteur — appli web installable (PWA) pour concerts, mariages et lives.
    Les données sont stockées sur l'appareil (fonctionne hors ligne) et synchronisées
-   avec Supabase quand l'utilisateur est connecté. */
+   avec Supabase par équipe : l'admin gère textes, setlists et membres ; les membres
+   lisent, lancent le prompteur et pilotent la télécommande. */
 (() => {
 'use strict';
 
@@ -12,8 +13,10 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID() :
   }));
 const nowIso = () => new Date().toISOString();
 const ts = (iso) => Date.parse(iso) || 0;
-const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const ic = (name) => `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+const setIcon = (el, name) => { el.innerHTML = ic(name); };
 
 /* ================= STOCKAGE LOCAL ================= */
 const store = {
@@ -27,24 +30,46 @@ const db = {
   save() { store.set('pr_textes', this.textes); store.set('pr_setlists', this.setlists); }
 };
 
-function randomCode() {
-  const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  let s = ''; for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)];
-  return s;
+function guessDevice() {
+  const ua = navigator.userAgent;
+  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'iPad';
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/Android/.test(ua)) return 'Android';
+  return 'Ordinateur';
 }
 
 const defaults = {
   font: window.innerWidth < 500 ? 48 : 72,
   speed: 15, lh: 1.35, margin: 6, guide: 30, count: 3,
   align: 'left', theme: 'dark', mirror: false, flip: false, upper: false,
-  showguide: true, autonext: false, code: randomCode()
+  showguide: true, autonext: false, deviceId: uuid(), deviceName: guessDevice()
 };
 const prefs = Object.assign({}, defaults, store.get('pr_prefs', {}));
-store.set('pr_prefs', prefs);
+delete prefs.code;
 const savePrefs = () => store.set('pr_prefs', prefs);
+savePrefs();
 
-const liveTextes = () => Object.values(db.textes).filter(t => !t.supprime);
-const liveSetlists = () => Object.values(db.setlists).filter(s => !s.supprime);
+/* ================= ÉQUIPE ================= */
+const team = {
+  list: store.get('pr_teams', []),          // [{id, nom, code_invitation, role}]
+  id: store.get('pr_team', null),
+  members: [],
+  current() { return this.list.find(t => t.id === this.id) || null; },
+  save() { store.set('pr_teams', this.list); store.set('pr_team', this.id); }
+};
+let session = null;
+
+// Sans compte : tout est local et modifiable. Avec compte : seuls les admins modifient.
+function canEdit() {
+  if (!session) return true;
+  const t = team.current();
+  return !!t && t.role === 'admin';
+}
+function inScope(x) { return session ? x.equipe_id === team.id : !x.equipe_id; }
+function scopeId() { return session ? team.id : null; }
+
+const liveTextes = () => Object.values(db.textes).filter(t => !t.supprime && inScope(t));
+const liveSetlists = () => Object.values(db.setlists).filter(s => !s.supprime && inScope(s));
 
 function touchTexte(t) { t.updated_at = nowIso(); t._dirty = true; db.save(); scheduleSync(); }
 function touchSetlist(s) { s.updated_at = nowIso(); s._dirty = true; db.save(); scheduleSync(); }
@@ -57,6 +82,7 @@ function toast(msg, ms = 2200) {
 }
 
 const stack = [];
+const visible = (id) => !$('#' + id).classList.contains('hidden');
 function show(id, push = true) {
   const cur = $$('.view').find(v => !v.classList.contains('hidden'));
   if (push && cur && cur.id !== id) stack.push(cur.id);
@@ -71,8 +97,8 @@ function back() {
 $$('[data-back]').forEach(b => b.addEventListener('click', () => { onLeaveView(); back(); }));
 
 function onLeaveView() {
-  if (!$('#v-edit').classList.contains('hidden')) flushEdit();
-  if (!$('#v-remote').classList.contains('hidden')) rcLeave();
+  if (visible('v-edit')) flushEdit();
+  if (visible('v-remote')) RC.target = null;
 }
 
 /* ================= ACCUEIL ================= */
@@ -90,30 +116,40 @@ function firstLine(s) {
 }
 
 function renderHome() {
+  const edit = canEdit();
+  const t = team.current();
+  const chip = $('#team-chip');
+  chip.classList.toggle('hidden', !session || !t);
+  if (session && t) chip.innerHTML = ic('users') + esc(t.nom) + (t.role === 'admin' ? ' · admin' : '');
+  $('#fab').classList.toggle('hidden', !edit);
+
   const q = $('#search').value.trim().toLowerCase();
   const textes = liveTextes()
     .filter(t => !q || (t.titre + ' ' + t.contenu).toLowerCase().includes(q))
-    .sort((a, b) => ts(b.updated_at) - ts(a.updated_at));
+    .sort((a, b) => (a.titre || '').localeCompare(b.titre || '', 'fr'));
   const ul = $('#list-textes'); ul.innerHTML = '';
   for (const t of textes) {
     const li = document.createElement('li');
     li.innerHTML = `<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div>
-      <button class="li-play" aria-label="Lancer">▶</button>`;
+      <button class="li-play" aria-label="Lancer">${ic('play')}</button>`;
     li.querySelector('.li-title').textContent = t.titre || 'Sans titre';
     li.querySelector('.li-sub').textContent = firstLine(t.contenu) || 'Vide';
     li.querySelector('.li-main').onclick = () => openEdit(t.id);
     li.querySelector('.li-play').onclick = () => startPrompter([t.id], 0);
     ul.appendChild(li);
   }
-  $('#empty-textes').classList.toggle('hidden', textes.length > 0 || !!q);
+  const et = $('#empty-textes');
+  et.innerHTML = edit ? 'Aucun texte pour l\'instant.<br>Appuie sur <b>+</b> pour ajouter ta première chanson ou ton discours.'
+    : 'Aucun texte dans cette équipe.<br>Les textes ajoutés par l\'admin apparaîtront ici.';
+  et.classList.toggle('hidden', textes.length > 0 || !!q);
 
   const sls = liveSetlists().sort((a, b) => ts(b.updated_at) - ts(a.updated_at));
   const ul2 = $('#list-setlists'); ul2.innerHTML = '';
   for (const s of sls) {
-    const ids = s.texte_ids.filter(id => db.textes[id] && !db.textes[id].supprime);
+    const ids = setlistIds(s);
     const li = document.createElement('li');
     li.innerHTML = `<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div>
-      <button class="li-play" aria-label="Lancer">▶</button>`;
+      <button class="li-play" aria-label="Lancer">${ic('play')}</button>`;
     li.querySelector('.li-title').textContent = s.nom || 'Setlist sans nom';
     li.querySelector('.li-sub').textContent = `${ids.length} morceau${ids.length > 1 ? 'x' : ''} · ` +
       ids.map(id => db.textes[id].titre || 'Sans titre').join(', ');
@@ -121,13 +157,18 @@ function renderHome() {
     li.querySelector('.li-play').onclick = () => ids.length ? startPrompter(ids, 0) : toast('Setlist vide');
     ul2.appendChild(li);
   }
-  $('#empty-setlists').classList.toggle('hidden', sls.length > 0);
+  const es = $('#empty-setlists');
+  es.innerHTML = edit ? 'Aucune setlist.<br>Crée une setlist pour enchaîner tes morceaux pendant un concert ou un mariage.'
+    : 'Aucune setlist dans cette équipe.';
+  es.classList.toggle('hidden', sls.length > 0);
 }
 
+$('#team-chip').onclick = () => openAccount();
 $('#fab').addEventListener('click', () => {
+  if (!canEdit()) return;
   if (currentTab === 'textes') openEdit(null);
   else {
-    const s = { id: uuid(), nom: '', texte_ids: [], supprime: false, created_at: nowIso() };
+    const s = { id: uuid(), nom: '', texte_ids: [], supprime: false, created_at: nowIso(), equipe_id: scopeId() };
     db.setlists[s.id] = s; touchSetlist(s); openSetlist(s.id);
   }
 });
@@ -137,12 +178,16 @@ let editId = null, editTimer = null;
 function openEdit(id) {
   editId = id;
   const t = id ? db.textes[id] : null;
+  const edit = canEdit();
   $('#edit-titre').value = t ? t.titre : '';
   $('#edit-contenu').value = t ? t.contenu : '';
-  $('#edit-delete').classList.toggle('hidden', !t);
+  $('#edit-titre').readOnly = $('#edit-contenu').readOnly = !edit;
+  $('#edit-ro').classList.toggle('hidden', edit);
+  $('#edit-import-btn').classList.toggle('hidden', !edit);
+  $('#edit-delete').classList.toggle('hidden', !t || !edit);
   updateStats();
   show('v-edit');
-  if (!t) $('#edit-titre').focus();
+  if (!t && edit) $('#edit-titre').focus();
 }
 function updateStats() {
   const c = $('#edit-contenu').value;
@@ -151,11 +196,12 @@ function updateStats() {
 }
 function flushEdit() {
   clearTimeout(editTimer);
-  const titre = $('#edit-titre').value, contenu = $('#edit-contenu').value;
   let t = editId ? db.textes[editId] : null;
+  if (!canEdit()) return t;
+  const titre = $('#edit-titre').value, contenu = $('#edit-contenu').value;
   if (!t) {
     if (!titre.trim() && !contenu.trim()) return null;
-    t = { id: uuid(), titre: '', contenu: '', reglages: {}, supprime: false, created_at: nowIso() };
+    t = { id: uuid(), titre: '', contenu: '', reglages: {}, supprime: false, created_at: nowIso(), equipe_id: scopeId() };
     db.textes[t.id] = t; editId = t.id;
     $('#edit-delete').classList.remove('hidden');
   }
@@ -175,7 +221,7 @@ $('#edit-import').addEventListener('change', async (e) => {
 });
 $('#edit-delete').addEventListener('click', () => {
   const t = editId && db.textes[editId];
-  if (!t || !confirm(`Supprimer « ${t.titre || 'Sans titre'} » ?`)) return;
+  if (!t || !canEdit() || !confirm(`Supprimer « ${t.titre || 'Sans titre'} » ?`)) return;
   t.supprime = true; touchTexte(t); editId = null; back();
 });
 $('#edit-play').addEventListener('click', () => {
@@ -186,23 +232,24 @@ $('#edit-play').addEventListener('click', () => {
 
 /* ================= SETLISTS ================= */
 let slId = null;
+function setlistIds(s) { return s ? s.texte_ids.filter(id => db.textes[id] && !db.textes[id].supprime) : []; }
 function openSetlist(id) { slId = id; renderSetlist(); show('v-setlist'); }
-function slIds() {
-  const s = db.setlists[slId];
-  return s ? s.texte_ids.filter(id => db.textes[id] && !db.textes[id].supprime) : [];
-}
 function renderSetlist() {
   const s = db.setlists[slId]; if (!s) return;
+  const edit = canEdit();
   $('#sl-nom').value = s.nom;
-  const ids = slIds();
+  $('#sl-nom').readOnly = !edit;
+  $('#sl-delete').classList.toggle('hidden', !edit);
+  $('#sl-add').classList.toggle('hidden', !edit);
+  const ids = setlistIds(s);
   const ol = $('#sl-items'); ol.innerHTML = '';
   ids.forEach((id, i) => {
     const t = db.textes[id];
     const li = document.createElement('li');
-    li.innerHTML = `<span class="li-num">${i + 1}</span><div class="li-main"><div class="li-title"></div></div>
-      <button class="li-small" data-a="up" aria-label="Monter">↑</button>
-      <button class="li-small" data-a="down" aria-label="Descendre">↓</button>
-      <button class="li-small" data-a="rm" aria-label="Retirer">✕</button>`;
+    li.innerHTML = `<span class="li-num">${i + 1}</span><div class="li-main"><div class="li-title"></div></div>` + (edit ? `
+      <button class="li-small" data-a="up" aria-label="Monter">${ic('up')}</button>
+      <button class="li-small" data-a="down" aria-label="Descendre">${ic('down')}</button>
+      <button class="li-small" data-a="rm" aria-label="Retirer">${ic('x')}</button>` : '');
     li.querySelector('.li-title').textContent = t.titre || 'Sans titre';
     li.querySelector('.li-main').onclick = () => startPrompter(ids, i);
     li.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
@@ -218,15 +265,16 @@ function renderSetlist() {
   $('#sl-empty').classList.toggle('hidden', ids.length > 0);
 }
 $('#sl-nom').addEventListener('input', () => {
+  if (!canEdit()) return;
   const s = db.setlists[slId]; s.nom = $('#sl-nom').value; touchSetlist(s);
 });
 $('#sl-delete').addEventListener('click', () => {
   const s = db.setlists[slId];
-  if (!confirm(`Supprimer la setlist « ${s.nom || 'sans nom'} » ? (les textes sont conservés)`)) return;
+  if (!canEdit() || !confirm(`Supprimer la setlist « ${s.nom || 'sans nom'} » ? (les textes sont conservés)`)) return;
   s.supprime = true; touchSetlist(s); back();
 });
 $('#sl-play').addEventListener('click', () => {
-  const ids = slIds(); if (!ids.length) return toast('Ajoute des textes d\'abord');
+  const ids = setlistIds(db.setlists[slId]); if (!ids.length) return toast('Ajoute des textes d\'abord');
   startPrompter(ids, 0);
 });
 $('#sl-add').addEventListener('click', () => { renderPicker(); $('#picker').classList.remove('hidden'); });
@@ -235,13 +283,13 @@ $('#picker').addEventListener('click', (e) => { if (e.target.id === 'picker') $(
 function renderPicker() {
   const s = db.setlists[slId];
   const ul = $('#picker-list'); ul.innerHTML = '';
-  const textes = liveTextes().sort((a, b) => (a.titre || '').localeCompare(b.titre || ''));
+  const textes = liveTextes().sort((a, b) => (a.titre || '').localeCompare(b.titre || '', 'fr'));
   if (!textes.length) ul.innerHTML = '<p class="empty">Aucun texte. Crée d\'abord des textes dans l\'onglet Textes.</p>';
   for (const t of textes) {
     const li = document.createElement('li');
     const on = s.texte_ids.includes(t.id);
     li.className = on ? 'checked' : '';
-    li.innerHTML = `<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div><span>${on ? '✓' : '+'}</span>`;
+    li.innerHTML = `<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div><span class="li-mark">${ic(on ? 'check' : 'plus')}</span>`;
     li.querySelector('.li-title').textContent = t.titre || 'Sans titre';
     li.querySelector('.li-sub').textContent = firstLine(t.contenu);
     li.onclick = () => {
@@ -257,7 +305,7 @@ function renderPicker() {
 const P = {
   queue: [], idx: 0, pos: 0, playing: false, raf: 0, last: 0,
   speed: prefs.speed, uiTimer: 0, counting: false, countTimer: 0, autoTimer: 0, saveTimer: 0,
-  vel: 0, wake: null
+  vel: 0, wake: null, open: false
 };
 const pScroll = $('#p-scroll'), pText = $('#p-text'), pUi = $('#p-ui');
 
@@ -301,8 +349,7 @@ function setPos(p) {
   P.pos = clamp(p, 0, maxPos());
   pText.style.transform = `translate3d(0, ${-P.pos}px, 0)`;
   const m = maxPos();
-  const pct = m ? P.pos / m * 100 : 0;
-  $('#p-prog').style.width = pct + '%';
+  $('#p-prog').style.width = (m ? P.pos / m * 100 : 0) + '%';
   updateMeta();
 }
 
@@ -321,6 +368,7 @@ function loadSong(i) {
   clearTimeout(P.autoTimer);
   applyStyle();
   updateSpeedLabel();
+  trackPresence();
   sendState(true);
 }
 
@@ -335,26 +383,32 @@ function updateMeta() {
   $('#p-meta').textContent = parts.join(' · ');
 }
 
+let shownPlaying = null;
 function updateSpeedLabel() {
   $('#p-speed').textContent = P.speed;
-  $('#p-play').textContent = (P.playing || P.counting) ? '❚❚' : '▶';
+  const on = P.playing || P.counting;
+  if (on !== shownPlaying) { setIcon($('#p-play'), on ? 'pause' : 'play'); shownPlaying = on; }
 }
 
 function startPrompter(ids, i) {
   P.queue = ids.slice();
+  P.open = true;
   show('v-prompter');
   loadSong(i);
   showUi();
   requestWake();
-  rcHostConnect();
+  clearInterval(P.beat);
+  P.beat = setInterval(() => sendState(true), 2000);
   // L'affichage peut changer de taille une fois la vue affichée (barres iOS)
   setTimeout(applyStyle, 60);
 }
 
 function closePrompter() {
   pause();
+  P.open = false;
+  clearInterval(P.beat);
   releaseWake();
-  rcHostDisconnect();
+  untrackPresence();
   back();
 }
 
@@ -379,7 +433,7 @@ function play() {
 function reallyPlay() {
   P.playing = true; P.last = 0;
   P.raf = requestAnimationFrame(tick);
-  updateSpeedLabel(); fadeUiSoon(); sendState(true);
+  updateSpeedLabel(); fadeUiSoon(); sendState(true); trackPresence();
 }
 function countdown(n) {
   P.counting = true; updateSpeedLabel(); fadeUiSoon(600);
@@ -392,9 +446,11 @@ function countdown(n) {
   step(); sendState(true);
 }
 function pause() {
+  const was = P.playing || P.counting;
   P.playing = false; cancelAnimationFrame(P.raf);
   if (P.counting) { P.counting = false; clearTimeout(P.countTimer); $('#p-count').classList.add('hidden'); }
   updateSpeedLabel(); showUi(); sendState(true);
+  if (was) trackPresence();
 }
 function toggle() { (P.playing || P.counting) ? pause() : play(); }
 
@@ -406,7 +462,7 @@ function onEnd() {
     $('#p-endcard').classList.remove('hidden');
     if (prefs.autonext) P.autoTimer = setTimeout(() => goSong(P.idx + 1, true), 2500);
   } else {
-    toast(P.queue.length > 1 ? 'Fin de la setlist 🎉' : 'Fin du texte');
+    toast(P.queue.length > 1 ? 'Fin de la setlist' : 'Fin du texte');
   }
 }
 function goSong(i, autoplay) {
@@ -423,7 +479,8 @@ function changeSpeed(d) {
   P.saveTimer = setTimeout(() => {
     const t = curTexte(); if (!t) return;
     t.reglages = Object.assign({}, t.reglages, { vitesse: P.speed });
-    touchTexte(t);
+    // Un membre garde sa vitesse sur son appareil ; l'admin la sauvegarde pour toute l'équipe.
+    if (canEdit()) touchTexte(t); else db.save();
   }, 1500);
 }
 function nudge(fraction) { setPos(P.pos + vh() * fraction); sendState(true); }
@@ -436,7 +493,7 @@ function fadeUiSoon(ms = 2500) {
 }
 
 /* --- gestes : glisser pour se déplacer, toucher pour lecture/pause --- */
-let tStart = null;
+let tStart = null, lastTouchEnd = 0;
 pScroll.addEventListener('touchstart', (e) => {
   const y = e.touches[0].clientY;
   tStart = { y, pos: P.pos, t: performance.now(), lastY: y, lastT: performance.now(), moved: false };
@@ -465,7 +522,6 @@ pScroll.addEventListener('touchend', () => {
   };
   if (!P.playing) step(); else sendState(true);
 });
-let lastTouchEnd = 0;
 pScroll.addEventListener('click', () => { if (performance.now() - lastTouchEnd > 800) toggle(); });
 pScroll.addEventListener('wheel', (e) => { e.preventDefault(); setPos(P.pos + e.deltaY * (prefs.flip ? -1 : 1)); }, { passive: false });
 pUi.addEventListener('touchstart', () => { if (!pUi.classList.contains('faded')) { showUi(); if (P.playing) fadeUiSoon(); } }, { passive: true });
@@ -480,7 +536,7 @@ $('#p-close').onclick = closePrompter;
 
 /* --- clavier et pédales Bluetooth --- */
 document.addEventListener('keydown', (e) => {
-  if ($('#v-prompter').classList.contains('hidden')) return;
+  if (!P.open) return;
   if (!$('#p-settings').classList.contains('hidden') && e.key !== 'Escape') return;
   const k = e.key;
   let handled = true;
@@ -497,8 +553,8 @@ document.addEventListener('keydown', (e) => {
   if (handled) e.preventDefault();
 });
 
-window.addEventListener('resize', () => { if (!$('#v-prompter').classList.contains('hidden')) applyStyle(); });
-setInterval(() => { if (!$('#v-prompter').classList.contains('hidden')) updateMeta(); }, 15000);
+window.addEventListener('resize', () => { if (P.open) applyStyle(); });
+setInterval(() => { if (P.open) updateMeta(); }, 15000);
 
 /* --- garder l'écran allumé --- */
 async function requestWake() {
@@ -506,8 +562,10 @@ async function requestWake() {
 }
 function releaseWake() { try { P.wake && P.wake.release(); } catch {} P.wake = null; }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !$('#v-prompter').classList.contains('hidden')) requestWake();
-  if (document.visibilityState === 'visible') scheduleSync(500);
+  if (document.visibilityState !== 'visible') return;
+  if (P.open) requestWake();
+  scheduleSync(500);
+  if (session) connectTeam();
 });
 
 /* --- réglages --- */
@@ -526,9 +584,12 @@ function renderSettings() {
   for (const [k, id] of Object.entries(checks)) $('#' + id).checked = !!prefs[k];
   $$('#s-align button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.align));
   $$('#s-theme button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.theme));
-  $('#s-code').textContent = prefs.code;
-  $('#s-remote-status').textContent = !sb ? 'Télécommande indisponible hors ligne.' :
-    (RC.connected ? 'Télécommande connectée ✓' : 'Ouvre 📡 Télécommande sur un autre téléphone.');
+  $('#s-device').value = prefs.deviceName;
+  const t = team.current();
+  $('#s-remote-status').textContent = !session || !t
+    ? 'Connecte-toi à une équipe pour piloter ce prompteur depuis un autre téléphone.'
+    : TC.ready ? `Visible dans la télécommande de l'équipe « ${t.nom} ».`
+    : 'Connexion à l\'équipe en cours…';
 }
 for (const [k, id] of Object.entries(sliders)) {
   $('#' + id).addEventListener('input', (e) => {
@@ -544,6 +605,9 @@ for (const [k, id] of Object.entries(checks)) {
 }
 $$('#s-align button').forEach(b => b.onclick = () => { prefs.align = b.dataset.v; savePrefs(); applyStyle(); renderSettings(); });
 $$('#s-theme button').forEach(b => b.onclick = () => { prefs.theme = b.dataset.v; savePrefs(); applyStyle(); renderSettings(); });
+$('#s-device').addEventListener('change', (e) => {
+  prefs.deviceName = e.target.value.trim() || guessDevice(); savePrefs(); trackPresence();
+});
 $('#p-settings-btn').onclick = () => { pause(); renderSettings(); $('#p-settings').classList.remove('hidden'); };
 function closeSettings() { $('#p-settings').classList.add('hidden'); }
 $('#p-settings-done').onclick = closeSettings;
@@ -560,7 +624,7 @@ try {
   }
 } catch (e) { console.warn('Supabase indisponible', e); }
 
-let session = null, syncTimer = null, syncing = false;
+let syncTimer = null, syncing = false;
 
 function scheduleSync(ms = 2000) {
   if (!session) return;
@@ -571,8 +635,10 @@ function mergeRemote(map, rows) {
   let changed = false;
   for (const r of rows) {
     const l = map[r.id];
-    if (!l || (!l._dirty && ts(r.updated_at) !== ts(l.updated_at)) || (l._dirty && ts(r.updated_at) > ts(l.updated_at))) {
+    if (!l || l.equipe_id !== r.equipe_id || (!l._dirty && ts(r.updated_at) !== ts(l.updated_at)) || (l._dirty && ts(r.updated_at) > ts(l.updated_at))) {
       const { user_id, ...rest } = r;
+      // un membre garde sa vitesse personnelle
+      if (l && l.reglages && l.reglages.vitesse && !canEdit()) rest.reglages = Object.assign({}, rest.reglages, { vitesse: l.reglages.vitesse });
       map[r.id] = Object.assign(rest, { _dirty: false });
       changed = true;
     }
@@ -581,11 +647,9 @@ function mergeRemote(map, rows) {
 }
 
 async function pushDirty(table, map, fields) {
-  const dirty = Object.values(map).filter(x => x._dirty);
+  const dirty = Object.values(map).filter(x => x._dirty && x.equipe_id === team.id);
   if (!dirty.length) return;
-  const rows = dirty.map(x => {
-    const o = {}; for (const f of fields) o[f] = x[f]; return o;
-  });
+  const rows = dirty.map(x => { const o = {}; for (const f of fields) o[f] = x[f]; return o; });
   const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
   if (error) throw error;
   for (const x of dirty) {
@@ -595,24 +659,26 @@ async function pushDirty(table, map, fields) {
 }
 
 async function sync() {
-  if (!sb || !session || syncing || !navigator.onLine) return;
+  if (!sb || !session || !team.id || syncing || !navigator.onLine) return;
   syncing = true; setBanner('Synchronisation…');
   try {
     const [a, b] = await Promise.all([
-      sb.from('prompteur_textes').select('*'),
-      sb.from('prompteur_setlists').select('*')
+      sb.from('prompteur_textes').select('*').eq('equipe_id', team.id),
+      sb.from('prompteur_setlists').select('*').eq('equipe_id', team.id)
     ]);
     if (a.error) throw a.error; if (b.error) throw b.error;
     const c1 = mergeRemote(db.textes, a.data), c2 = mergeRemote(db.setlists, b.data);
     for (const t of Object.values(db.textes)) { t.reglages = t.reglages || {}; t.created_at = t.created_at || nowIso(); }
     for (const s of Object.values(db.setlists)) { s.texte_ids = s.texte_ids || []; s.created_at = s.created_at || nowIso(); }
-    await pushDirty('prompteur_textes', db.textes, ['id', 'titre', 'contenu', 'reglages', 'supprime', 'updated_at', 'created_at']);
-    await pushDirty('prompteur_setlists', db.setlists, ['id', 'nom', 'texte_ids', 'supprime', 'updated_at', 'created_at']);
+    if (canEdit()) {
+      await pushDirty('prompteur_textes', db.textes, ['id', 'equipe_id', 'titre', 'contenu', 'reglages', 'supprime', 'updated_at', 'created_at']);
+      await pushDirty('prompteur_setlists', db.setlists, ['id', 'equipe_id', 'nom', 'texte_ids', 'supprime', 'updated_at', 'created_at']);
+    }
     db.save();
     store.set('pr_lastsync', nowIso());
     setBanner(null);
-    if ((c1 || c2) && !$('#v-home').classList.contains('hidden')) renderHome();
-    renderAccount();
+    if ((c1 || c2) && visible('v-home')) renderHome();
+    if (visible('v-account')) renderAccount();
   } catch (e) {
     console.warn(e);
     setBanner('Synchro impossible pour l\'instant — tes textes restent sur l\'appareil.');
@@ -624,75 +690,248 @@ function setBanner(msg) {
   if (!msg) return b.classList.add('hidden');
   b.textContent = msg; b.classList.remove('hidden');
 }
-window.addEventListener('online', () => scheduleSync(500));
+window.addEventListener('online', () => { scheduleSync(500); if (session) connectTeam(); });
 
-/* ================= COMPTE ================= */
-$('#btn-account').onclick = () => { renderAccount(); show('v-account'); };
+/* --- équipes --- */
+async function loadTeams(retry = true) {
+  if (!sb || !session) return;
+  const { data, error } = await sb.from('prompteur_membres')
+    .select('role, equipe_id, prompteur_equipes(id, nom, code_invitation)')
+    .eq('user_id', session.user.id);
+  if (error) { console.warn(error); return; }
+  team.list = (data || []).filter(r => r.prompteur_equipes).map(r => ({
+    id: r.equipe_id, nom: r.prompteur_equipes.nom, code_invitation: r.prompteur_equipes.code_invitation, role: r.role
+  })).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+  // Nouveau compte : on lui crée son équipe dont il est l'admin.
+  if (!team.list.length && retry) {
+    const { error: e2 } = await sb.rpc('prompteur_creer_equipe', { p_nom: 'Mon équipe' });
+    if (!e2) return loadTeams(false);
+  }
+  if (!team.current()) team.id = team.list.length ? team.list[0].id : null;
+  team.save();
+  adoptLocalItems();
+}
+
+// Les textes créés sans compte sur cet appareil rejoignent l'équipe (si on en est admin).
+function adoptLocalItems() {
+  if (!canEdit() || !team.id) return;
+  let n = 0;
+  for (const map of [db.textes, db.setlists]) {
+    for (const x of Object.values(map)) {
+      if (!x.equipe_id && x._dirty) { x.equipe_id = team.id; n++; }
+    }
+  }
+  if (n) db.save();
+}
+
+async function loadMembers() {
+  if (!sb || !session || !team.id) { team.members = []; return; }
+  const { data, error } = await sb.from('prompteur_membres').select('user_id, role, email').eq('equipe_id', team.id);
+  if (!error) team.members = (data || []).sort((a, b) => (a.role === b.role ? a.email.localeCompare(b.email) : a.role === 'admin' ? -1 : 1));
+}
+
+async function selectTeam(id) {
+  team.id = id; team.save();
+  adoptLocalItems();
+  renderHome();
+  connectTeam(true);
+  await Promise.all([sync(), loadMembers()]);
+  renderAccount();
+}
+
+/* ================= COMPTE & ÉQUIPE ================= */
+$('#btn-account').onclick = () => openAccount();
+async function openAccount() {
+  renderAccount(); show('v-account');
+  if (session) { await loadTeams(); await loadMembers(); renderAccount(); }
+}
+
 function renderAccount() {
   $('#acc-out').classList.toggle('hidden', !!session);
   $('#acc-in').classList.toggle('hidden', !session);
-  if (session) {
-    $('#acc-who').textContent = session.user.email;
-    const l = store.get('pr_lastsync', null);
-    $('#acc-last').textContent = l ? 'Dernière synchro : ' + new Date(l).toLocaleString('fr-FR') : '';
+  setIcon($('#btn-account'), session ? 'users' : 'user');
+  $('#btn-account').classList.toggle('on', !!session);
+  $('#acc-import-btn').classList.toggle('hidden', !canEdit());
+  if (!session) return;
+  $('#acc-who').textContent = session.user.email;
+  const l = store.get('pr_lastsync', null);
+  $('#acc-last').textContent = l ? 'Dernière synchro : ' + new Date(l).toLocaleString('fr-FR') : '';
+
+  const t = team.current();
+  const sel = $('#team-select');
+  sel.classList.toggle('hidden', team.list.length < 2);
+  sel.innerHTML = team.list.map(x => `<option value="${x.id}" ${x.id === team.id ? 'selected' : ''}>${esc(x.nom)}${x.role === 'admin' ? ' (admin)' : ''}</option>`).join('');
+  $('#team-card').classList.toggle('hidden', !t);
+  if (!t) return;
+  const admin = t.role === 'admin';
+  const nameEl = $('#team-name');
+  if (document.activeElement !== nameEl) nameEl.value = t.nom;
+  nameEl.readOnly = !admin;
+  const badge = $('#team-role');
+  badge.textContent = admin ? 'Admin' : 'Membre';
+  badge.classList.toggle('admin', admin);
+  $('#team-admin').classList.toggle('hidden', !admin);
+  $('#team-code').textContent = t.code_invitation || '';
+  $('#team-member-note').textContent = admin
+    ? 'Tu peux créer, modifier et supprimer les textes et setlists, et gérer les membres.'
+    : 'Tu peux lire les textes, lancer le prompteur et utiliser la télécommande. Seuls les admins modifient.';
+  $('#team-leave').classList.toggle('hidden', team.list.length < 2 && admin);
+
+  const ul = $('#team-members'); ul.innerHTML = '';
+  for (const m of team.members) {
+    const me = m.user_id === session.user.id;
+    const li = document.createElement('li');
+    li.innerHTML = `${ic(m.role === 'admin' ? 'crown' : 'user')}<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div>`;
+    li.querySelector('.li-title').textContent = m.email || 'Membre';
+    li.querySelector('.li-sub').textContent = (m.role === 'admin' ? 'Admin' : 'Membre') + (me ? ' · toi' : '');
+    if (admin && !me) {
+      const roleBtn = document.createElement('button');
+      roleBtn.className = 'li-small'; roleBtn.title = m.role === 'admin' ? 'Retirer les droits admin' : 'Nommer admin';
+      roleBtn.setAttribute('aria-label', roleBtn.title);
+      roleBtn.innerHTML = ic(m.role === 'admin' ? 'user' : 'crown');
+      roleBtn.onclick = () => setRole(m, m.role === 'admin' ? 'membre' : 'admin');
+      const rm = document.createElement('button');
+      rm.className = 'li-small'; rm.setAttribute('aria-label', 'Retirer de l\'équipe'); rm.innerHTML = ic('x');
+      rm.onclick = () => removeMember(m);
+      li.append(roleBtn, rm);
+    }
+    ul.appendChild(li);
   }
-  $('#btn-account').textContent = session ? '☁︎' : '👤';
 }
+
 const accMsg = (m) => { $('#acc-msg').textContent = m || ''; };
-function creds() {
-  if (!sb) { accMsg('La sauvegarde en ligne n\'est pas encore configurée. Tes textes restent sur cet appareil.'); return null; }
-  const email = $('#acc-email').value.trim(), password = $('#acc-pass').value;
-  if (!email || password.length < 6) { accMsg('Entre ton email et un mot de passe d\'au moins 6 caractères.'); return null; }
-  return { email, password };
-}
 function frErr(e) {
   const m = (e && e.message) || String(e);
   if (/Invalid login/i.test(m)) return 'Email ou mot de passe incorrect.';
   if (/not confirmed/i.test(m)) return 'Confirme d\'abord ton email (regarde ta boîte mail), puis reconnecte-toi.';
   if (/already registered/i.test(m)) return 'Ce compte existe déjà : utilise « Se connecter ».';
+  if (/Code invalide/i.test(m)) return 'Code d\'invitation inconnu. Vérifie-le auprès de ton admin.';
+  if (/au moins un admin/i.test(m)) return 'Une équipe doit garder au moins un admin. Nomme d\'abord quelqu\'un d\'autre admin.';
   if (/fetch|network/i.test(m)) return 'Pas de connexion internet.';
   return m;
+}
+function creds() {
+  if (!sb) { accMsg('La sauvegarde en ligne n\'est pas configurée. Tes textes restent sur cet appareil.'); return null; }
+  const email = $('#acc-email').value.trim(), password = $('#acc-pass').value;
+  if (!email || password.length < 6) { accMsg('Entre ton email et un mot de passe d\'au moins 6 caractères.'); return null; }
+  return { email, password };
 }
 $('#acc-login').onclick = async () => {
   const c = creds(); if (!c) return; accMsg('Connexion…');
   const { error } = await sb.auth.signInWithPassword(c);
-  accMsg(error ? frErr(error) : 'Connecté ✓');
+  accMsg(error ? frErr(error) : 'Connecté.');
 };
 $('#acc-signup').onclick = async () => {
   const c = creds(); if (!c) return; accMsg('Création du compte…');
   const { data, error } = await sb.auth.signUp({ ...c, options: { emailRedirectTo: location.origin + location.pathname } });
   if (error) return accMsg(frErr(error));
-  accMsg(data.session ? 'Compte créé et connecté ✓' : 'Compte créé ! Clique sur le lien reçu par email, puis reviens ici et connecte-toi.');
+  accMsg(data.session ? 'Compte créé et connecté.' : 'Compte créé ! Clique sur le lien reçu par email, puis reviens ici et connecte-toi.');
 };
 $('#acc-reset').onclick = async () => {
-  if (!sb) return accMsg('La sauvegarde en ligne n\'est pas encore configurée.');
+  if (!sb) return accMsg('La sauvegarde en ligne n\'est pas configurée.');
   const email = $('#acc-email').value.trim(); if (!email) return accMsg('Entre ton email ci-dessus.');
   const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
   accMsg(error ? frErr(error) : 'Email de réinitialisation envoyé.');
 };
-$('#acc-sync').onclick = () => sync();
+$('#acc-sync').onclick = async () => { accMsg('Synchronisation…'); await loadTeams(); await sync(); await loadMembers(); renderAccount(); renderHome(); accMsg(''); };
 $('#acc-logout').onclick = async () => {
-  const wipe = confirm('Effacer aussi les textes de CET appareil ?\n(Ils restent sauvegardés dans ton compte.)\n\nOK = effacer · Annuler = garder');
+  const wipe = confirm('Effacer aussi les textes de l\'équipe sur CET appareil ?\n(Ils restent sauvegardés en ligne.)\n\nOK = effacer · Annuler = garder');
+  disconnectTeam();
   await sb.auth.signOut();
-  if (wipe) { db.textes = {}; db.setlists = {}; db.save(); }
+  if (wipe) {
+    for (const map of [db.textes, db.setlists]) for (const [k, x] of Object.entries(map)) if (x.equipe_id) delete map[k];
+    db.save();
+  }
+  team.list = []; team.id = null; team.members = []; team.save();
   renderAccount(); renderHome();
 };
+
+$('#team-select').addEventListener('change', (e) => selectTeam(e.target.value));
+$('#team-name').addEventListener('change', async (e) => {
+  const t = team.current(); const nom = e.target.value.trim();
+  if (!t || t.role !== 'admin' || !nom || nom === t.nom) return;
+  const { error } = await sb.from('prompteur_equipes').update({ nom }).eq('id', t.id);
+  if (error) return accMsg(frErr(error));
+  t.nom = nom; team.save(); renderHome(); accMsg('Nom de l\'équipe enregistré.');
+});
+$('#team-share').onclick = async () => {
+  const t = team.current(); if (!t) return;
+  const text = `Rejoins l'équipe « ${t.nom} » sur Prompteur : ouvre ${location.origin + location.pathname}, crée ton compte puis entre le code ${t.code_invitation} dans Compte et équipe.`;
+  try {
+    if (navigator.share) await navigator.share({ title: 'Prompteur', text });
+    else { await navigator.clipboard.writeText(text); toast('Invitation copiée'); }
+  } catch {}
+};
+$('#team-newcode').onclick = async () => {
+  const t = team.current(); if (!t || !confirm('Créer un nouveau code ? L\'ancien ne fonctionnera plus.')) return;
+  const { data, error } = await sb.rpc('prompteur_nouveau_code', { p_equipe: t.id });
+  if (error) return accMsg(frErr(error));
+  t.code_invitation = data; team.save(); renderAccount();
+};
+$('#join-btn').onclick = async () => {
+  if (!session) return;
+  const code = $('#join-code').value.trim().toUpperCase();
+  if (code.length < 4) return accMsg('Entre le code d\'invitation donné par ton admin.');
+  accMsg('Connexion à l\'équipe…');
+  const { data, error } = await sb.rpc('prompteur_rejoindre', { p_code: code });
+  if (error) return accMsg(frErr(error));
+  $('#join-code').value = '';
+  await loadTeams(); await selectTeam(data);
+  accMsg(`Tu as rejoint l'équipe « ${(team.current() || {}).nom || ''} ».`);
+};
+$('#team-create').onclick = async () => {
+  const nom = prompt('Nom de la nouvelle équipe :', 'Mon groupe');
+  if (!nom) return;
+  const { data, error } = await sb.rpc('prompteur_creer_equipe', { p_nom: nom });
+  if (error) return accMsg(frErr(error));
+  await loadTeams(); await selectTeam(data);
+  accMsg(`Équipe « ${nom} » créée. Tu en es l'admin.`);
+};
+$('#team-leave').onclick = async () => {
+  const t = team.current(); if (!t || !confirm(`Quitter l'équipe « ${t.nom} » ?`)) return;
+  const { error } = await sb.from('prompteur_membres').delete().eq('equipe_id', t.id).eq('user_id', session.user.id);
+  if (error) return accMsg(frErr(error));
+  team.id = null; await loadTeams(); await selectTeam(team.id);
+};
+async function setRole(m, role) {
+  const { error } = await sb.from('prompteur_membres').update({ role }).eq('equipe_id', team.id).eq('user_id', m.user_id);
+  if (error) return accMsg(frErr(error));
+  await loadMembers(); renderAccount();
+}
+async function removeMember(m) {
+  if (!confirm(`Retirer ${m.email || 'ce membre'} de l'équipe ?`)) return;
+  const { error } = await sb.from('prompteur_membres').delete().eq('equipe_id', team.id).eq('user_id', m.user_id);
+  if (error) return accMsg(frErr(error));
+  await loadMembers(); renderAccount();
+}
 
 if (sb) {
   sb.auth.onAuthStateChange((event, s) => {
     session = s;
-    renderAccount();
+    // la session restaurée au démarrage n'est pas transmise automatiquement au temps réel
+    if (s) { try { sb.realtime.setAuth(s.access_token); } catch {} }
     if (event === 'PASSWORD_RECOVERY') {
       const p = prompt('Nouveau mot de passe (6 caractères min.) :');
-      if (p && p.length >= 6) sb.auth.updateUser({ password: p }).then(({ error }) => toast(error ? frErr(error) : 'Mot de passe modifié ✓'));
+      if (p && p.length >= 6) sb.auth.updateUser({ password: p }).then(({ error }) => toast(error ? frErr(error) : 'Mot de passe modifié'));
     }
-    if (s && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) scheduleSync(300);
+    if (s && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+      // hors du callback d'authentification pour ne pas bloquer le client
+      setTimeout(async () => {
+        await loadTeams();
+        renderHome(); renderAccount();
+        connectTeam();
+        await sync();
+        if (visible('v-account')) { await loadMembers(); renderAccount(); }
+      }, 0);
+    }
+    if (!s && event !== 'INITIAL_SESSION') disconnectTeam();
+    renderAccount(); renderHome();
   });
 }
 
 /* --- sauvegarde fichier --- */
 $('#acc-export').onclick = () => {
-  const data = { app: 'prompteur', version: 1, date: nowIso(), textes: liveTextes(), setlists: liveSetlists() };
+  const data = { app: 'prompteur', version: 2, date: nowIso(), textes: liveTextes(), setlists: liveSetlists() };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -701,36 +940,52 @@ $('#acc-export').onclick = () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 };
 $('#acc-importfile').addEventListener('change', async (e) => {
-  const f = e.target.files[0]; if (!f) return;
+  const f = e.target.files[0]; if (!f || !canEdit()) return;
   try {
     const data = JSON.parse(await f.text());
     let n = 0;
+    // nouveaux identifiants : l'import ajoute des copies dans l'équipe active
+    const ids = {};
     for (const t of data.textes || []) {
-      if (!t.id) continue;
-      db.textes[t.id] = { id: t.id, titre: t.titre || '', contenu: t.contenu || '', reglages: t.reglages || {}, supprime: false, created_at: t.created_at || nowIso(), updated_at: nowIso(), _dirty: true }; n++;
+      const id = uuid(); ids[t.id] = id;
+      db.textes[id] = { id, equipe_id: scopeId(), titre: t.titre || '', contenu: t.contenu || '', reglages: t.reglages || {}, supprime: false, created_at: nowIso(), updated_at: nowIso(), _dirty: true }; n++;
     }
     for (const s of data.setlists || []) {
-      if (!s.id) continue;
-      db.setlists[s.id] = { id: s.id, nom: s.nom || '', texte_ids: s.texte_ids || [], supprime: false, created_at: s.created_at || nowIso(), updated_at: nowIso(), _dirty: true };
+      const id = uuid();
+      db.setlists[id] = { id, equipe_id: scopeId(), nom: s.nom || '', texte_ids: (s.texte_ids || []).map(x => ids[x]).filter(Boolean), supprime: false, created_at: nowIso(), updated_at: nowIso(), _dirty: true };
     }
     db.save(); scheduleSync(300);
-    accMsg(`${n} texte(s) importé(s) ✓`);
+    accMsg(`${n} texte(s) importé(s).`);
   } catch { accMsg('Fichier de sauvegarde invalide.'); }
   e.target.value = '';
 });
 
-/* ================= TÉLÉCOMMANDE (Supabase Realtime) ================= */
-const RC = { host: null, client: null, connected: false, lastSeen: 0, stateTimer: 0, lastSend: 0, beat: 0 };
+/* ================= TÉLÉCOMMANDE (Supabase Realtime, canal privé de l'équipe) ================= */
+const TC = { ch: null, teamId: null, ready: false, devices: {} };
+const RC = { target: null, last: null, lastSeen: 0 };
 
-function chanName(code) { return 'prompteur-rc-' + code.toUpperCase(); }
-
-/* côté prompteur */
-function rcHostConnect() {
-  if (!sb || RC.host) return;
-  RC.host = sb.channel(chanName(prefs.code), { config: { broadcast: { self: false } } });
-  RC.host.on('broadcast', { event: 'cmd' }, ({ payload }) => {
-    RC.connected = true; RC.lastSeen = Date.now();
-    const a = payload && payload.a;
+function connectTeam(force) {
+  if (!sb || !session || !team.id) return;
+  if (TC.ch && TC.teamId === team.id && !force) return;
+  disconnectTeam();
+  TC.teamId = team.id;
+  const ch = sb.channel('prompteur:' + team.id, {
+    config: { private: true, broadcast: { self: false }, presence: { key: prefs.deviceId } }
+  });
+  TC.ch = ch;
+  ch.on('presence', { event: 'sync' }, () => {
+    const st = ch.presenceState();
+    TC.devices = {};
+    for (const [key, metas] of Object.entries(st)) {
+      if (key === prefs.deviceId || !metas.length) continue;
+      const m = metas[metas.length - 1];
+      if (m.prompteur) TC.devices[key] = m;
+    }
+    renderRemote();
+  });
+  ch.on('broadcast', { event: 'cmd' }, ({ payload }) => {
+    if (!payload || payload.to !== prefs.deviceId || !P.open) return;
+    const a = payload.a;
     if (a === 'toggle') toggle();
     else if (a === 'speed+') changeSpeed(1);
     else if (a === 'speed-') changeSpeed(-1);
@@ -742,27 +997,56 @@ function rcHostConnect() {
     else if (a === 'goto') goSong(+payload.i);
     sendState(true);
   });
-  RC.host.subscribe();
-  RC.beat = setInterval(() => {
-    if (Date.now() - RC.lastSeen > 15000) RC.connected = false;
-    sendState(true);
-  }, 2000);
+  ch.on('broadcast', { event: 'ping' }, ({ payload }) => {
+    if (P.open && (!payload || !payload.to || payload.to === prefs.deviceId)) sendState(true);
+  });
+  ch.on('broadcast', { event: 'state' }, ({ payload }) => {
+    if (!payload || payload.from !== RC.target) return;
+    RC.last = payload; RC.lastSeen = Date.now();
+    renderRemote();
+  });
+  ch.subscribe((status) => {
+    if (ch !== TC.ch) return;
+    TC.ready = status === 'SUBSCRIBED';
+    if (TC.ready) { trackPresence(); if (RC.target) ping(RC.target); }
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      console.warn('Canal équipe :', status);
+      setTimeout(() => { if (ch === TC.ch) connectTeam(true); }, 5000);
+    }
+    renderRemote();
+  });
 }
-function rcHostDisconnect() {
-  clearInterval(RC.beat);
-  if (RC.host) { sb.removeChannel(RC.host); RC.host = null; }
-  RC.connected = false;
+function disconnectTeam() {
+  if (TC.ch) { try { sb.removeChannel(TC.ch); } catch {} }
+  TC.ch = null; TC.ready = false; TC.teamId = null; TC.devices = {};
 }
+
+// Le prompteur ouvert s'annonce à l'équipe : il apparaît dans la télécommande.
+let trackTimer = 0;
+function trackPresence() {
+  if (!TC.ready) return;
+  clearTimeout(trackTimer);
+  trackTimer = setTimeout(() => {
+    if (!TC.ready) return;
+    if (!P.open) { TC.ch.untrack(); return; }
+    const t = curTexte();
+    TC.ch.track({ prompteur: true, nom: prefs.deviceName, titre: t ? (t.titre || 'Sans titre') : '', playing: P.playing || P.counting });
+  }, 150);
+}
+function untrackPresence() { if (TC.ready) { clearTimeout(trackTimer); TC.ch.untrack(); } }
+
+let lastStateSend = 0;
 function sendState(force) {
-  if (!RC.host) return;
+  if (!TC.ready || !P.open) return;
   const now = Date.now();
-  if (!force && now - RC.lastSend < 300) return;
-  RC.lastSend = now;
+  if (!force && now - lastStateSend < 300) return;
+  lastStateSend = now;
   const t = curTexte();
   const m = maxPos();
-  RC.host.send({
+  TC.ch.send({
     type: 'broadcast', event: 'state',
     payload: {
+      from: prefs.deviceId, nom: prefs.deviceName,
       titre: t ? (t.titre || 'Sans titre') : '', idx: P.idx, n: P.queue.length,
       playing: P.playing || P.counting, speed: P.speed, prog: m ? P.pos / m : 0,
       songs: P.queue.map(id => (db.textes[id] && db.textes[id].titre) || 'Sans titre')
@@ -772,49 +1056,69 @@ function sendState(force) {
 
 /* côté téléphone télécommande */
 $('#btn-remote').onclick = () => {
-  if (!sb) return toast('Télécommande indisponible');
-  $('#rc-code').value = store.get('pr_rc_last', '');
-  $('#rc-connect').classList.remove('hidden'); $('#rc-pad').classList.add('hidden');
+  RC.target = null; RC.last = null;
   show('v-remote');
+  connectTeam();
+  renderRemote();
 };
-$('#rc-join').onclick = () => {
-  const code = $('#rc-code').value.trim().toUpperCase();
-  if (code.length !== 6) return toast('Le code fait 6 caractères');
-  store.set('pr_rc_last', code);
-  rcLeave();
-  RC.client = sb.channel(chanName(code), { config: { broadcast: { self: false } } });
-  RC.client.on('broadcast', { event: 'state' }, ({ payload }) => { RC.lastSeen = Date.now(); renderRemote(payload); });
-  RC.client.subscribe((status) => {
-    if (status === 'SUBSCRIBED') rcSend('ping');
-  });
-  $('#rc-connect').classList.add('hidden'); $('#rc-pad').classList.remove('hidden');
-  $('#rc-title').textContent = 'En attente du prompteur…';
-  $('#rc-sub').textContent = 'Lance un texte sur l\'autre appareil (code ' + code + ').';
-  RC.watch = setInterval(() => {
-    if (Date.now() - RC.lastSeen > 6000) {
-      $('#rc-title').textContent = 'Prompteur non détecté';
-      $('#rc-sub').textContent = 'Vérifie le code et qu\'un texte est ouvert sur l\'autre appareil.';
-    }
-  }, 2000);
-};
+$('#rc-login').onclick = () => openAccount();
+$('#rc-other').onclick = () => { RC.target = null; RC.last = null; renderRemote(); };
+
+function ping(to) { if (TC.ready) TC.ch.send({ type: 'broadcast', event: 'ping', payload: { to } }); }
 function rcSend(a, extra) {
-  if (!RC.client) return;
-  RC.client.send({ type: 'broadcast', event: 'cmd', payload: Object.assign({ a }, extra) });
+  if (!TC.ready || !RC.target) return toast('Télécommande non connectée');
+  TC.ch.send({ type: 'broadcast', event: 'cmd', payload: Object.assign({ to: RC.target, a }, extra) });
   if (navigator.vibrate) navigator.vibrate(15);
 }
-function rcLeave() {
-  clearInterval(RC.watch);
-  if (RC.client) { sb.removeChannel(RC.client); RC.client = null; }
-}
-$('#rc-leave').onclick = () => { rcLeave(); $('#rc-connect').classList.remove('hidden'); $('#rc-pad').classList.add('hidden'); };
 $('#rc-play').onclick = () => rcSend('toggle');
 $$('[data-rc]').forEach(b => b.onclick = () => rcSend(b.dataset.rc));
 
-function renderRemote(s) {
+let rcShownPlaying = null;
+function renderRemote() {
+  if (!visible('v-remote')) return;
+  const logged = !!session && !!team.id;
+  const t = team.current();
+  $('#rc-login').classList.toggle('hidden', logged);
+  if (!logged) {
+    $('#rc-pad').classList.add('hidden'); $('#rc-list-view').classList.remove('hidden');
+    $('#rc-intro').textContent = 'La télécommande fonctionne avec ton équipe : connecte-toi sur ce téléphone et sur l\'appareil de scène avec des comptes de la même équipe.';
+    $('#rc-devices').innerHTML = ''; $('#rc-none').classList.add('hidden');
+    return;
+  }
+  if (RC.target && !TC.devices[RC.target] && TC.ready && Date.now() - RC.lastSeen > 6000) {
+    RC.target = null; RC.last = null; toast('Le prompteur a été fermé');
+  }
+  if (!RC.target) {
+    $('#rc-pad').classList.add('hidden'); $('#rc-list-view').classList.remove('hidden');
+    $('#rc-intro').textContent = TC.ready
+      ? `Prompteurs ouverts dans l'équipe « ${t ? t.nom : ''} ». Choisis celui à piloter.`
+      : 'Connexion à l\'équipe…';
+    const ul = $('#rc-devices'); ul.innerHTML = '';
+    const entries = Object.entries(TC.devices);
+    for (const [key, d] of entries) {
+      const li = document.createElement('li');
+      li.innerHTML = `${ic('screen')}<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div><span class="dot ${d.playing ? '' : 'off'}"></span>${ic('chevron')}`;
+      li.querySelector('.li-title').textContent = d.nom || 'Prompteur';
+      li.querySelector('.li-sub').textContent = (d.titre || '') + (d.playing ? ' · en lecture' : ' · en pause');
+      li.onclick = () => { RC.target = key; RC.last = null; RC.lastSeen = Date.now(); ping(key); renderRemote(); };
+      ul.appendChild(li);
+    }
+    $('#rc-none').classList.toggle('hidden', !TC.ready || entries.length > 0);
+    return;
+  }
+  $('#rc-list-view').classList.add('hidden'); $('#rc-pad').classList.remove('hidden');
+  const d = TC.devices[RC.target] || {};
+  const s = RC.last;
+  $('#rc-device').innerHTML = ic('screen') + esc((s && s.nom) || d.nom || 'Prompteur');
+  if (!s) {
+    $('#rc-title').textContent = d.titre || 'Connexion au prompteur…';
+    $('#rc-sub').textContent = '';
+    return;
+  }
   $('#rc-title').textContent = s.titre;
   $('#rc-sub').textContent = (s.n > 1 ? `Morceau ${s.idx + 1}/${s.n} · ` : '') + (s.playing ? 'Défilement en cours' : 'En pause');
   $('#rc-prog').style.width = (s.prog * 100) + '%';
-  $('#rc-play').textContent = s.playing ? '❚❚' : '▶';
+  if (s.playing !== rcShownPlaying) { setIcon($('#rc-play'), s.playing ? 'pause' : 'play'); rcShownPlaying = s.playing; }
   $('#rc-speed').textContent = s.speed;
   const ol = $('#rc-songs');
   const key = JSON.stringify([s.songs, s.idx]);
@@ -829,11 +1133,12 @@ function renderRemote(s) {
     ol.appendChild(li);
   });
 }
+setInterval(() => { if (visible('v-remote')) renderRemote(); }, 3000);
 
 /* ================= DÉMARRAGE ================= */
 if (!Object.keys(db.textes).length && !store.get('pr_welcomed', false)) {
   const t = {
-    id: uuid(), titre: 'Exemple – Mode d\'emploi', reglages: {}, supprime: false, created_at: nowIso(),
+    id: uuid(), titre: 'Exemple – Mode d\'emploi', reglages: {}, supprime: false, created_at: nowIso(), equipe_id: null,
     contenu: `# Bienvenue
 Ceci est ton prompteur.
 Touche l'écran pour lancer ou mettre en pause.
@@ -846,8 +1151,8 @@ Commence une ligne par # pour faire un titre de section, comme « Refrain ».
 # En concert
 Crée une setlist pour enchaîner tes morceaux.
 Règle la vitesse de chaque chanson : elle est mémorisée.
-Utilise un deuxième téléphone comme télécommande 📡
-ou une pédale Bluetooth.
+Pilote le défilement depuis un deuxième téléphone
+ou avec une pédale Bluetooth.
 
 # Refrain
 Et voilà, c'est à toi !

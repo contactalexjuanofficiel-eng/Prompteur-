@@ -10,11 +10,12 @@ C'est une appli web installable (PWA) : on l'ajoute à l'écran d'accueil et ell
 - Compte à rebours, ligne de lecture, taille, interligne, marges, alignement
 - Thèmes blanc/noir, jaune, noir/blanc · **mode miroir** (vitre de prompteur) · retournement
 - **Setlists** : enchaîne les morceaux d'un concert ou d'un mariage (enchaînement automatique possible)
-- **Télécommande** : un 2ᵉ téléphone pilote le prompteur (Supabase Realtime, code à 6 caractères)
+- **Équipes** : l'admin crée, modifie et supprime les textes et setlists, et gère les membres ; les membres (musiciens) lisent, lancent le prompteur et utilisent la télécommande. On rejoint une équipe avec son code d'invitation.
+- **Télécommande sans code** : chaque prompteur ouvert apparaît automatiquement chez les membres de l'équipe (Supabase Realtime, canal privé réservé à l'équipe)
 - **Pédale / clavier Bluetooth** : Espace, flèches, Page précédente / suivante, + / −
 - L'écran reste allumé pendant le défilement
 - Mise en forme : `# Refrain` = titre de section, `[Guitare seule]` = indication en couleur
-- Compte (email + mot de passe) : textes synchronisés entre tous les appareils via Supabase
+- Compte (email + mot de passe) : textes de l'équipe synchronisés entre tous les appareils via Supabase
 - Export / import d'une sauvegarde, import de fichiers .txt
 
 ## Installer sur iPhone / iPad
@@ -32,6 +33,7 @@ N'importe quel hébergement de fichiers statiques fonctionne aussi (Netlify, Ver
 
 ## Supabase
 
-Tables `prompteur_textes` et `prompteur_setlists` avec RLS (chaque utilisateur ne voit que ses données) : schéma dans `supabase/schema.sql`.
+Schéma : `supabase/schema.sql` puis `supabase/equipes.sql`. Tables `prompteur_equipes`, `prompteur_membres`,
+`prompteur_textes` et `prompteur_setlists` avec RLS : seuls les membres d'une équipe voient ses données, seuls ses admins les modifient.
 Connexion configurée dans `config.js`. Pour que les liens des emails (confirmation, mot de passe oublié)
 reviennent vers l'appli, ajoute son adresse dans Supabase → **Authentication → URL Configuration → Redirect URLs**.
