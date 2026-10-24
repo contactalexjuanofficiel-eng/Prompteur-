@@ -151,14 +151,14 @@ Ligne vide       → espace"></textarea>
     <span class="spacer"></span>
   </header>
   <div class="edit-body">
-    <div id="acc-out">
-      <p class="muted">Connecte-toi pour retrouver les textes de ton équipe sur tous tes appareils et utiliser la télécommande. Sans compte, tout reste sur cet appareil.</p>
-      <input type="email" id="acc-email" placeholder="Email" autocomplete="email" autocapitalize="off">
-      <input type="password" id="acc-pass" placeholder="Mot de passe (6 caractères min.)" autocomplete="current-password">
-      <button class="primary" id="acc-login">Se connecter</button>
-      <button class="secondary" id="acc-signup">Créer un compte</button>
-      <button class="link-btn" id="acc-reset">Mot de passe oublié ?</button>
-    </div>
+    <form id="acc-out" action="#" method="post" autocomplete="on" novalidate>
+      <p class="muted">Connecte-toi une seule fois : tu restes connecté ensuite. Tu retrouves les textes de ton équipe sur tous tes appareils et tu peux utiliser la télécommande. Sans compte, tout reste sur cet appareil.</p>
+      <input type="email" id="acc-email" name="email" placeholder="Email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="email">
+      <input type="password" id="acc-pass" name="password" placeholder="Mot de passe (6 caractères min.)" autocomplete="current-password">
+      <button class="primary" id="acc-login" type="submit">Se connecter</button>
+      <button class="secondary" id="acc-signup" type="button">Créer un compte</button>
+      <button class="link-btn" id="acc-reset" type="button">Mot de passe oublié ?</button>
+    </form>
 
     <div id="acc-in" class="hidden">
       <div class="card">

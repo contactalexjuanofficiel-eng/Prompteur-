@@ -886,11 +886,15 @@ function creds() {
   if (!email || password.length < 6) { accMsg('Entre ton email et un mot de passe d\'au moins 6 caractères.'); return null; }
   return { email, password };
 }
-$('#acc-login').onclick = async () => {
+// Vrai formulaire : l'iPhone propose d'enregistrer le mot de passe et le remplit ensuite avec Face ID.
+$('#acc-out').addEventListener('submit', async (e) => {
+  e.preventDefault();
   const c = creds(); if (!c) return; accMsg('Connexion…');
   const { error } = await sb.auth.signInWithPassword(c);
-  accMsg(error ? frErr(error) : 'Connecté.');
-};
+  if (error) return accMsg(frErr(error));
+  accMsg('Connecté. Tu resteras connecté sur cet appareil.');
+  $('#acc-pass').value = '';
+});
 $('#acc-signup').onclick = async () => {
   const c = creds(); if (!c) return; accMsg('Création du compte…');
   const { data, error } = await sb.auth.signUp({ ...c, options: { emailRedirectTo: location.origin + location.pathname } });
@@ -1308,6 +1312,9 @@ Et voilà, c'est à toi !
 }
 renderHome();
 renderAccount();
+
+// Demande à l'appareil de ne jamais effacer les données de l'appli (session, textes hors ligne).
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
