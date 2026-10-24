@@ -479,6 +479,7 @@ function closePrompter() {
   clearInterval(P.beat);
   releaseWake();
   untrackPresence();
+  sendState(true);
   back();
 }
 
@@ -1111,7 +1112,7 @@ $('#acc-importfile').addEventListener('change', async (e) => {
 
 /* ================= TÉLÉCOMMANDE (Supabase Realtime, canal privé de l'équipe) ================= */
 const TC = { ch: null, teamId: null, ready: false, devices: {} };
-const RC = { target: null, last: null, lastSeen: 0 };
+const RC = { target: null, last: null, lastSeen: 0, tab: 'setlists' };
 
 function connectTeam(force) {
   if (!sb || !session || !team.id) return;
@@ -1128,26 +1129,15 @@ function connectTeam(force) {
     for (const [key, metas] of Object.entries(st)) {
       if (key === prefs.deviceId || !metas.length) continue;
       const m = metas[metas.length - 1];
-      if (m.prompteur) TC.devices[key] = m;
+      if (m.appareil) TC.devices[key] = m;
     }
     renderRemote();
   });
   ch.on('broadcast', { event: 'cmd' }, ({ payload }) => {
-    if (!payload || payload.to !== prefs.deviceId || !P.open) return;
-    const a = payload.a;
-    if (a === 'toggle') toggle();
-    else if (a === 'speed+') changeSpeed(1);
-    else if (a === 'speed-') changeSpeed(-1);
-    else if (a === 'fwd') nudge(0.35);
-    else if (a === 'back') nudge(-0.35);
-    else if (a === 'top') { pause(); setPos(0); }
-    else if (a === 'next') goSong(P.idx + 1);
-    else if (a === 'prev') goSong(P.idx - 1);
-    else if (a === 'goto') goSong(+payload.i);
-    sendState(true);
+    if (payload && payload.to === prefs.deviceId) remoteCommand(payload);
   });
   ch.on('broadcast', { event: 'ping' }, ({ payload }) => {
-    if (P.open && (!payload || !payload.to || payload.to === prefs.deviceId)) sendState(true);
+    if (!payload || !payload.to || payload.to === prefs.deviceId) sendState(true);
   });
   ch.on('broadcast', { event: 'state' }, ({ payload }) => {
     if (!payload || payload.from !== RC.target) return;
@@ -1170,32 +1160,72 @@ function disconnectTeam() {
   TC.ch = null; TC.ready = false; TC.teamId = null; TC.devices = {};
 }
 
-// Le prompteur ouvert s'annonce à l'équipe : il apparaît dans la télécommande.
+// Commande reçue d'une télécommande de l'équipe.
+async function remoteCommand(c) {
+  const a = c.a;
+  if (a === 'open') {
+    // ouvrir un texte ou une setlist à distance, puis lancer le compte à rebours
+    let ids = Array.isArray(c.ids) ? c.ids : [];
+    if (ids.some(id => !db.textes[id])) await sync();   // texte ajouté depuis la dernière synchro
+    ids = ids.filter(id => db.textes[id] && !db.textes[id].supprime);
+    if (!ids.length) { toast('Texte introuvable sur cet appareil'); sendState(true); return; }
+    if (modalResolve) modalResolve(null);
+    $('#picker').classList.add('hidden');
+    closeSettings();
+    if (visible('v-edit')) flushEdit();
+    if (P.open) pause();
+    startPrompter(ids, clamp(+c.i || 0, 0, ids.length - 1));
+    toast('Lancé depuis la télécommande');
+    setTimeout(play, 100);
+    return;
+  }
+  if (!P.open) { sendState(true); return; }
+  if (a === 'toggle') toggle();
+  else if (a === 'speed+') changeSpeed(1);
+  else if (a === 'speed-') changeSpeed(-1);
+  else if (a === 'fwd') nudge(0.35);
+  else if (a === 'back') nudge(-0.35);
+  else if (a === 'top') { pause(); setPos(0); }
+  else if (a === 'next') goSong(P.idx + 1);
+  else if (a === 'prev') goSong(P.idx - 1);
+  else if (a === 'goto') goSong(+c.i);
+  else if (a === 'close') { closePrompter(); sendState(true); return; }
+  sendState(true);
+}
+
+// Chaque appareil connecté s'annonce à l'équipe (prompteur ouvert ou non) :
+// il apparaît dans la télécommande et peut recevoir un texte à lancer.
 let trackTimer = 0;
 function trackPresence() {
   if (!TC.ready) return;
   clearTimeout(trackTimer);
   trackTimer = setTimeout(() => {
     if (!TC.ready) return;
-    if (!P.open) { TC.ch.untrack(); return; }
-    const t = curTexte();
-    TC.ch.track({ prompteur: true, nom: prefs.deviceName, titre: t ? (t.titre || 'Sans titre') : '', playing: P.playing || P.counting });
+    const t = P.open ? curTexte() : null;
+    TC.ch.track({
+      appareil: true, nom: prefs.deviceName, prompteur: P.open,
+      titre: t ? (t.titre || 'Sans titre') : '', playing: P.open && (P.playing || P.counting)
+    });
   }, 150);
 }
-function untrackPresence() { if (TC.ready) { clearTimeout(trackTimer); TC.ch.untrack(); } }
+function untrackPresence() { trackPresence(); }
 
 let lastStateSend = 0;
 function sendState(force) {
-  if (!TC.ready || !P.open) return;
+  if (!TC.ready) return;
   const now = Date.now();
   if (!force && now - lastStateSend < 300) return;
   lastStateSend = now;
+  if (!P.open) {
+    TC.ch.send({ type: 'broadcast', event: 'state', payload: { from: prefs.deviceId, nom: prefs.deviceName, open: false } });
+    return;
+  }
   const t = curTexte();
   const m = maxPos();
   TC.ch.send({
     type: 'broadcast', event: 'state',
     payload: {
-      from: prefs.deviceId, nom: prefs.deviceName,
+      from: prefs.deviceId, nom: prefs.deviceName, open: true,
       titre: t ? (t.titre || 'Sans titre') : '', idx: P.idx, n: P.queue.length,
       playing: P.playing || P.counting, speed: P.speed, prog: m ? P.pos / m : 0,
       songs: P.queue.map(id => (db.textes[id] && db.textes[id].titre) || 'Sans titre')
@@ -1209,9 +1239,16 @@ $('#btn-remote').onclick = () => {
   show('v-remote');
   connectTeam();
   renderRemote();
+  scheduleSync(300);
 };
 $('#rc-login').onclick = () => openAccount();
 $('#rc-other').onclick = () => { RC.target = null; RC.last = null; renderRemote(); };
+$$('#rc-launch-tabs button').forEach(b => b.onclick = () => {
+  RC.tab = b.dataset.v;
+  $$('#rc-launch-tabs button').forEach(x => x.classList.toggle('on', x === b));
+  $('#rc-library').dataset.key = '';
+  renderRemote();
+});
 
 function ping(to) { if (TC.ready) TC.ch.send({ type: 'broadcast', event: 'ping', payload: { to } }); }
 function rcSend(a, extra) {
@@ -1221,6 +1258,36 @@ function rcSend(a, extra) {
 }
 $('#rc-play').onclick = () => rcSend('toggle');
 $$('[data-rc]').forEach(b => b.onclick = () => rcSend(b.dataset.rc));
+
+function renderLibrary() {
+  const ul = $('#rc-library');
+  const items = RC.tab === 'setlists'
+    ? liveSetlists().sort((a, b) => ts(b.updated_at) - ts(a.updated_at))
+        .map(s => ({ ids: setlistIds(s), titre: s.nom || 'Setlist sans nom' }))
+        .filter(x => x.ids.length)
+        .map(x => ({ ...x, sub: `${x.ids.length} morceau${x.ids.length > 1 ? 'x' : ''}` }))
+    : liveTextes().sort((a, b) => (a.titre || '').localeCompare(b.titre || '', 'fr'))
+        .map(t => ({ ids: [t.id], titre: t.titre || 'Sans titre', sub: firstLine(t.contenu) }));
+  const key = RC.tab + JSON.stringify(items.map(x => [x.titre, x.ids]));
+  if (ul.dataset.key === key) return;
+  ul.dataset.key = key; ul.innerHTML = '';
+  if (!items.length) {
+    ul.innerHTML = `<p class="empty">${RC.tab === 'setlists' ? 'Aucune setlist dans l\'équipe.' : 'Aucun texte dans l\'équipe.'}</p>`;
+    return;
+  }
+  for (const x of items) {
+    const li = document.createElement('li');
+    li.innerHTML = `<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div><span class="li-play">${ic('play')}</span>`;
+    li.querySelector('.li-title').textContent = x.titre;
+    li.querySelector('.li-sub').textContent = x.sub || '';
+    li.onclick = () => {
+      rcSend('open', { ids: x.ids, i: 0 });
+      const d = TC.devices[RC.target] || {};
+      toast(`Lancement sur ${d.nom || 'l\'appareil'}…`);
+    };
+    ul.appendChild(li);
+  }
+}
 
 let rcShownPlaying = null;
 function renderRemote() {
@@ -1235,20 +1302,23 @@ function renderRemote() {
     return;
   }
   if (RC.target && !TC.devices[RC.target] && TC.ready && Date.now() - RC.lastSeen > 6000) {
-    RC.target = null; RC.last = null; toast('Le prompteur a été fermé');
+    RC.target = null; RC.last = null; toast('L\'appareil s\'est déconnecté');
   }
   if (!RC.target) {
     $('#rc-pad').classList.add('hidden'); $('#rc-list-view').classList.remove('hidden');
     $('#rc-intro').textContent = TC.ready
-      ? `Prompteurs ouverts dans l'équipe « ${t ? t.nom : ''} ». Choisis celui à piloter.`
+      ? `Appareils de l'équipe « ${t ? t.nom : ''} ». Choisis celui à piloter.`
       : 'Connexion à l\'équipe…';
     const ul = $('#rc-devices'); ul.innerHTML = '';
-    const entries = Object.entries(TC.devices);
+    // les prompteurs ouverts d'abord
+    const entries = Object.entries(TC.devices).sort((a, b) => (b[1].prompteur ? 1 : 0) - (a[1].prompteur ? 1 : 0));
     for (const [key, d] of entries) {
       const li = document.createElement('li');
-      li.innerHTML = `${ic('screen')}<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div><span class="dot ${d.playing ? '' : 'off'}"></span>${ic('chevron')}`;
-      li.querySelector('.li-title').textContent = d.nom || 'Prompteur';
-      li.querySelector('.li-sub').textContent = (d.titre || '') + (d.playing ? ' · en lecture' : ' · en pause');
+      li.innerHTML = `${ic('screen')}<div class="li-main"><div class="li-title"></div><div class="li-sub"></div></div><span class="dot ${d.prompteur ? '' : 'off'}"></span>${ic('chevron')}`;
+      li.querySelector('.li-title').textContent = d.nom || 'Appareil';
+      li.querySelector('.li-sub').textContent = d.prompteur
+        ? (d.titre || '') + (d.playing ? ' · en lecture' : ' · en pause')
+        : 'Prêt : tu peux y lancer un texte';
       li.onclick = () => { RC.target = key; RC.last = null; RC.lastSeen = Date.now(); ping(key); renderRemote(); };
       ul.appendChild(li);
     }
@@ -1258,7 +1328,20 @@ function renderRemote() {
   $('#rc-list-view').classList.add('hidden'); $('#rc-pad').classList.remove('hidden');
   const d = TC.devices[RC.target] || {};
   const s = RC.last;
-  $('#rc-device').innerHTML = ic('screen') + esc((s && s.nom) || d.nom || 'Prompteur');
+  const open = s ? !!s.open : !!d.prompteur;
+  $('#rc-device').innerHTML = ic('screen') + esc((s && s.nom) || d.nom || 'Appareil');
+  $('#rc-controls').classList.toggle('hidden', !open);
+  $('#rc-launch-title').textContent = open ? 'Lancer autre chose' : 'Lancer sur cet appareil';
+  $('#rc-launch-hint').textContent = open
+    ? 'Remplace le texte affiché et relance le compte à rebours.'
+    : 'Le prompteur s\'ouvre sur l\'appareil et le compte à rebours démarre.';
+  renderLibrary();
+  if (!open) {
+    $('#rc-title').textContent = 'Prêt';
+    $('#rc-sub').textContent = 'Aucun texte ouvert. Choisis ci-dessous ce que tu veux lancer.';
+    $('#rc-prog').style.width = '0%';
+    return;
+  }
   if (!s) {
     $('#rc-title').textContent = d.titre || 'Connexion au prompteur…';
     $('#rc-sub').textContent = '';

@@ -290,3 +290,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
 .edit-body hr { margin: 14px 0; }
 .msg { margin: 0; }
 .msg:empty { display: none; }
+.rc-controls, .rc-launch { display: flex; flex-direction: column; gap: 12px; }
+.rc-controls > *, .rc-launch > * { flex-shrink: 0; }
+.rc-launch h3 { margin: 4px 0 0; }
+.rc-launch p { margin: 0; }
+.rc-library li { cursor: pointer; }
+.rc-library .li-play { pointer-events: none; }
+.flat-list li .li-play .ic { color: #fff; }

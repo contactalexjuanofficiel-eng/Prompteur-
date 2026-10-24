@@ -221,9 +221,9 @@ Ligne vide       → espace"></textarea>
     <span class="spacer"></span>
   </header>
   <div class="edit-body" id="rc-list-view">
-    <p class="muted" id="rc-intro">Prompteurs ouverts dans ton équipe. Choisis celui à piloter.</p>
+    <p class="muted" id="rc-intro">Appareils de ton équipe. Choisis celui à piloter.</p>
     <ul class="list flat-list" id="rc-devices"></ul>
-    <p class="empty hidden" id="rc-none">Aucun prompteur ouvert pour l'instant.<br>Lance un texte sur l'iPad ou le téléphone de scène : il apparaîtra ici automatiquement.</p>
+    <p class="empty hidden" id="rc-none">Aucun autre appareil pour l'instant.<br>Ouvre l'appli Prompteur sur l'iPad ou le téléphone de scène, connecté à la même équipe : il apparaîtra ici automatiquement.</p>
     <button class="primary hidden" id="rc-login">Se connecter à mon équipe</button>
   </div>
   <div class="rc-pad hidden" id="rc-pad">
@@ -233,6 +233,7 @@ Ligne vide       → espace"></textarea>
       <div class="rc-sub" id="rc-sub"></div>
       <div class="progress"><div id="rc-prog"></div></div>
     </div>
+    <div id="rc-controls" class="rc-controls">
     <button class="rc-play" id="rc-play" aria-label="Lecture / pause"><svg class="ic"><use href="#i-play"/></svg></button>
     <div class="rc-row">
       <button data-rc="speed-"><svg class="ic"><use href="#i-minus"/></svg>Vitesse</button>
@@ -249,7 +250,15 @@ Ligne vide       → espace"></textarea>
       <button data-rc="next">Suivant<svg class="ic"><use href="#i-next"/></svg></button>
     </div>
     <ol class="list rc-songs" id="rc-songs"></ol>
-    <button class="link-btn" id="rc-other">Choisir un autre prompteur</button>
+    <button class="secondary" data-rc="close"><svg class="ic"><use href="#i-x"/></svg>Fermer le prompteur</button>
+    </div>
+    <div class="rc-launch" id="rc-launch">
+      <h3 id="rc-launch-title">Lancer sur cet appareil</h3>
+      <p class="muted small" id="rc-launch-hint">Le prompteur s'ouvre sur l'appareil et le compte à rebours démarre.</p>
+      <div class="seg" id="rc-launch-tabs"><button data-v="setlists" class="on">Setlists</button><button data-v="textes">Textes</button></div>
+      <ul class="list flat-list" id="rc-library"></ul>
+    </div>
+    <button class="link-btn" id="rc-other">Choisir un autre appareil</button>
   </div>
 </section>
 
