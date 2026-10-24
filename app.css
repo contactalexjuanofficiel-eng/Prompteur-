@@ -328,3 +328,64 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
 .install-banner > .ic { color: var(--accent2); }
 .install-banner .small { color: var(--muted); margin-top: 2px; }
 .install-banner .icon-btn { background: none; width: 36px; height: 36px; }
+
+/* ---------- accords, notes, sections ---------- */
+.p-text { position: relative; }
+.cw { display: inline-block; white-space: nowrap; }
+.ch {
+  display: block; font-size: .52em; line-height: 1.15; font-weight: 800; padding-right: .35em;
+  white-space: nowrap; text-transform: none; letter-spacing: 0;
+}
+.ch-inline { font-size: .62em; font-weight: 800; text-transform: none; margin-right: .5em; }
+.ln.chline { opacity: .95; }
+.th-dark .ch, .th-dark .ch-inline { color: #7ee787; }
+.th-yellow .ch, .th-yellow .ch-inline { color: #7ee787; }
+.th-light .ch, .th-light .ch-inline { color: #1a7f37; }
+.ln.note {
+  font-size: .5em; font-weight: 600; font-style: italic; color: #c4b5fd; display: flex; align-items: center; gap: .35em;
+  margin: .2em 0; text-transform: none;
+}
+.ln.note .ic { width: 1em; height: 1em; }
+.th-light .ln.note { color: #6d28d9; }
+
+/* ---------- mode une ligne à la fois ---------- */
+.p-lines { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.pl-inner { width: 100%; font-weight: 700; display: flex; flex-direction: column; gap: .35em; }
+.pl-prev { font-size: .5em; opacity: .3; min-height: 1.2em; }
+.pl-sec { font-size: .45em; text-transform: uppercase; letter-spacing: .1em; color: var(--accent2); min-height: 1.2em; }
+.pl-cur { font-size: 1.25em; line-height: 1.2; }
+.pl-next { font-size: .62em; opacity: .5; min-height: 1.2em; }
+.p-lines .ln { display: block; }
+.p-lines .sec { display: none; }
+
+/* ---------- minuteur et commande reçue ---------- */
+.p-timer {
+  position: absolute; right: calc(14px + var(--safe-r)); top: calc(96px + var(--safe-t)); z-index: 4;
+  display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px;
+  background: rgba(20, 20, 24, .8); color: #fff; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.p-timer .ic { width: 22px; height: 22px; }
+.p-timer.warn { background: rgba(255, 176, 32, .9); color: #000; }
+.p-timer.over { background: rgba(255, 77, 79, .95); color: #fff; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .65; } }
+.p-by {
+  position: absolute; left: 50%; bottom: calc(160px + var(--safe-b)); transform: translateX(-50%); z-index: 4;
+  padding: 6px 12px; border-radius: 14px; background: rgba(20, 20, 24, .85); color: #fff; font-size: 14px; font-weight: 600;
+  pointer-events: none; white-space: nowrap;
+}
+.setrow { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.setrow > span { flex: 1; }
+.setrow b { min-width: 32px; text-align: center; color: var(--accent2); font-variant-numeric: tabular-nums; }
+.duree-row { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.duree-row span { flex: 1; color: var(--muted); }
+.duree-row input { width: 110px; text-align: center; }
+.duree-hint { margin: -4px 0 0; }
+.rc-secs { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 10px 14px; border-radius: 20px; background: var(--card2); font-weight: 600; font-size: 14px; }
+.chip.on { background: var(--accent); color: #fff; }
+.rc-by { text-align: center; }
+#modal-msg { white-space: pre-line; }
+.modal-card { max-height: calc(100dvh - 48px); overflow-y: auto; }
+.modal-card > * { flex-shrink: 0; }
+#modal-msg.long { text-align: left; color: var(--text); }

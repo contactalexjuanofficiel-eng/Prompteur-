@@ -46,6 +46,8 @@
     <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3 18h18L20 7l-5 4-3-6-3 6-5-4z"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5V3h4M16 17l5-5-5-5M21 12H9"/></symbol>
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6"/></symbol>
+    <symbol id="i-sections" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></symbol>
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
   </defs>
@@ -107,13 +109,20 @@
     <textarea id="edit-contenu" placeholder="Colle ou écris ton texte ici…
 
 Astuces :
-# Refrain        → titre de section (en couleur)
-[Guitare seule]  → indication de scène (en couleur)
-Ligne vide       → espace"></textarea>
+# Refrain          → section (on peut y sauter)
+[Am]Je t'ai [G]vu  → accords au-dessus des mots
+[Guitare seule]    → indication de scène
+// Faire signe au DJ → note visible des admins seulement
+Ligne vide         → espace"></textarea>
     <div class="edit-tools">
       <label class="file-btn" id="edit-import-btn"><svg class="ic"><use href="#i-file"/></svg>Importer .txt<input type="file" id="edit-import" accept=".txt,text/plain"></label>
       <span class="muted" id="edit-stats"></span>
     </div>
+    <label class="duree-row">
+      <span>Durée du morceau ou du discours</span>
+      <input type="text" id="edit-duree" placeholder="ex : 3:40" inputmode="numeric" autocomplete="off">
+    </label>
+    <p class="muted small duree-hint">Facultatif. Le défilement se cale pour finir pile à cette durée, et le minuteur l'utilise.</p>
   </div>
   <div class="bottombar">
     <button class="primary big" id="edit-play"><svg class="ic"><use href="#i-play"/></svg>Lancer le prompteur</button>
@@ -250,10 +259,13 @@ Ligne vide       → espace"></textarea>
       <p>Sur l'accueil, onglet <b>Textes</b>, touche <b>+</b>. Donne un titre et colle ou écris ton texte. Il est enregistré automatiquement.</p>
       <p>Mise en forme :</p>
       <ul>
-        <li><code># Refrain</code> en début de ligne : titre de section, en couleur.</li>
+        <li><code># Refrain</code> en début de ligne : section. On peut y sauter pendant le morceau.</li>
+        <li><code>[Am]Je t'ai [G]vu</code> : accords, affichés en petit au-dessus du mot qui suit. Notation américaine (Am, F#m, C/E) ou française (Rém, Sol7).</li>
         <li><code>[Guitare seule]</code> entre crochets : indication de scène, en couleur.</li>
+        <li><code>// Faire signe au DJ</code> : note visible seulement par les admins.</li>
         <li>Une ligne vide : un espace.</li>
       </ul>
+      <p><b>Durée</b> (facultatif, ex : <code>3:40</code>) : le défilement se cale pour finir pile à la fin, et le minuteur l'utilise.</p>
     </details>
 
     <details>
@@ -264,8 +276,11 @@ Ligne vide       → espace"></textarea>
         <li><b>Glisser le doigt</b> : avancer ou reculer.</li>
         <li><svg class="ic inline"><use href="#i-minus"/></svg> <svg class="ic inline"><use href="#i-plus"/></svg> : vitesse. Elle est <b>mémorisée pour chaque chanson</b>.</li>
         <li><svg class="ic inline"><use href="#i-prev"/></svg> <svg class="ic inline"><use href="#i-next"/></svg> : morceau précédent / suivant (setlist).</li>
-        <li><svg class="ic inline"><use href="#i-settings"/></svg> Réglages : taille, interligne, marges, ligne de lecture, compte à rebours, couleurs, <b>miroir</b> (vitre de prompteur), nom de l'appareil.</li>
+        <li><svg class="ic inline"><use href="#i-sections"/></svg> : aller directement au refrain, au pont…</li>
+        <li><svg class="ic inline"><use href="#i-settings"/></svg> Réglages : <b>mode une ligne à la fois</b>, <b>tonalité des accords</b> (+ / − demi-ton, mémorisée par chanson), taille, interligne, marges, compte à rebours, couleurs, <b>miroir</b>, <b>minuteur</b>, nom de l'appareil.</li>
       </ul>
+      <p><b>Mode une ligne à la fois :</b> la ligne en cours en très grand, la suivante en dessous. Toucher = lecture / pause, glisser vers le haut = ligne suivante. Idéal pour un discours de mariage.</p>
+      <p><b>Minuteur :</b> temps restant (ou écoulé) toujours visible. Il passe à l'orange à l'approche de la fin et au rouge en cas de dépassement.</p>
       <p>L'écran reste allumé pendant le défilement.</p>
     </details>
 
@@ -293,7 +308,8 @@ Ligne vide       → espace"></textarea>
         <li>Sur le téléphone télécommande, touche <svg class="ic inline"><use href="#i-remote"/></svg> en haut de l'accueil.</li>
         <li>Choisis l'appareil de scène dans la liste.</li>
         <li>Choisis une setlist ou un texte : il s'ouvre sur l'appareil de scène et le compte à rebours démarre.</li>
-        <li>Pilote ensuite : lecture / pause, vitesse, avancer, reculer, morceau suivant, fermer.</li>
+        <li>Pilote ensuite : lecture / pause, vitesse, tonalité, sections, avancer, reculer, morceau suivant, fermer.</li>
+        <li>Plusieurs télécommandes peuvent piloter le même appareil : le nom de celle qui a envoyé la commande s'affiche.</li>
       </ol>
       <p class="tip">L'appli doit rester <b>ouverte au premier plan</b> sur l'appareil de scène (pas d'écran verrouillé ni d'autre appli), sinon le téléphone la met en pause.</p>
     </details>
@@ -306,6 +322,12 @@ Ligne vide       → espace"></textarea>
         <li><b>Flèches droite / gauche</b> : morceau suivant / précédent.</li>
         <li><b>+ / −</b> : vitesse.</li>
       </ul>
+    </details>
+
+    <details>
+      <summary><span class="step">9</span>Avant de monter sur scène</summary>
+      <p>Le prompteur garde déjà l'écran allumé pendant le défilement. Pour éviter toute surprise :</p>
+      <button class="secondary" id="help-stage"><svg class="ic"><use href="#i-check"/></svg>Voir la liste pour mon téléphone</button>
     </details>
 
     <details>
@@ -349,6 +371,13 @@ Ligne vide       → espace"></textarea>
       <div class="rc-speed" id="rc-speed">–</div>
       <button data-rc="speed+"><svg class="ic"><use href="#i-plus"/></svg>Vitesse</button>
     </div>
+    <div class="rc-row hidden" id="rc-tr-row">
+      <button data-rc="tr-"><svg class="ic"><use href="#i-minus"/></svg>Ton</button>
+      <div class="rc-speed" id="rc-tr">0</div>
+      <button data-rc="tr+"><svg class="ic"><use href="#i-plus"/></svg>Ton</button>
+    </div>
+    <div class="rc-secs hidden" id="rc-secs"></div>
+    <div class="rc-by muted small hidden" id="rc-by"></div>
     <div class="rc-row">
       <button data-rc="back"><svg class="ic"><use href="#i-rewind"/></svg>Reculer</button>
       <button data-rc="fwd">Avancer<svg class="ic"><use href="#i-forward"/></svg></button>
@@ -376,7 +405,17 @@ Ligne vide       → espace"></textarea>
   <div id="p-scroll" class="p-scroll">
     <div id="p-text" class="p-text"></div>
   </div>
+  <div id="p-lines" class="p-lines hidden">
+    <div class="pl-inner" id="pl-inner">
+      <div class="pl-prev" id="pl-prev"></div>
+      <div class="pl-sec" id="pl-sec"></div>
+      <div class="pl-cur" id="pl-cur"></div>
+      <div class="pl-next" id="pl-next"></div>
+    </div>
+  </div>
   <div id="p-guide" class="p-guide"></div>
+  <div id="p-timer" class="p-timer hidden"></div>
+  <div id="p-by" class="p-by hidden"></div>
   <div id="p-count" class="p-count hidden"></div>
   <div id="p-endcard" class="p-endcard hidden">
     <div id="p-endtitle"></div>
@@ -390,6 +429,7 @@ Ligne vide       → espace"></textarea>
         <div id="p-title"></div>
         <div id="p-meta"></div>
       </div>
+      <button class="p-btn hidden" id="p-sec-btn" aria-label="Aller à une section"><svg class="ic"><use href="#i-sections"/></svg></button>
       <button class="p-btn" id="p-settings-btn" aria-label="Réglages"><svg class="ic"><use href="#i-settings"/></svg></button>
     </div>
     <div class="p-bottom">
@@ -405,6 +445,16 @@ Ligne vide       → espace"></textarea>
     </div>
   </div>
 
+  <div id="p-secsheet" class="sheet hidden">
+    <div class="sheet-card dark">
+      <div class="sheet-head">
+        <b>Aller à…</b>
+        <button class="link-btn" id="p-secsheet-done">Fermer</button>
+      </div>
+      <ul class="list" id="p-sec-list"></ul>
+    </div>
+  </div>
+
   <div id="p-settings" class="sheet hidden">
     <div class="sheet-card dark">
       <div class="sheet-head">
@@ -412,6 +462,15 @@ Ligne vide       → espace"></textarea>
         <button class="link-btn" id="p-settings-done">OK</button>
       </div>
       <div class="settings">
+        <div class="seg" id="s-mode">
+          <button data-v="scroll">Défilement</button><button data-v="line">Une ligne à la fois</button>
+        </div>
+        <div class="setrow" id="s-tr-row">
+          <span>Tonalité des accords</span>
+          <button class="li-small" id="s-tr-minus" aria-label="Baisser d'un demi-ton"><svg class="ic"><use href="#i-minus"/></svg></button>
+          <b id="s-tr-v">0</b>
+          <button class="li-small" id="s-tr-plus" aria-label="Monter d'un demi-ton"><svg class="ic"><use href="#i-plus"/></svg></button>
+        </div>
         <label>Taille du texte <span id="s-font-v"></span><input type="range" id="s-font" min="24" max="160" step="2"></label>
         <label>Vitesse <span id="s-speed-v"></span><input type="range" id="s-speed" min="1" max="60" step="1"></label>
         <label>Interligne <span id="s-lh-v"></span><input type="range" id="s-lh" min="1" max="2.2" step="0.05"></label>
@@ -429,12 +488,16 @@ Ligne vide       → espace"></textarea>
         <label class="check"><input type="checkbox" id="s-upper"> MAJUSCULES</label>
         <label class="check"><input type="checkbox" id="s-showguide"> Afficher la ligne de lecture</label>
         <label class="check"><input type="checkbox" id="s-autonext"> Enchaîner automatiquement (setlist)</label>
+        <label class="check"><input type="checkbox" id="s-chords"> Afficher les accords</label>
+        <label class="check"><input type="checkbox" id="s-fit"> Caler la vitesse sur la durée du morceau</label>
+        <label class="check"><input type="checkbox" id="s-timer"> Afficher le minuteur</label>
+        <button class="secondary" id="s-stage"><svg class="ic"><use href="#i-check"/></svg>Préparer le téléphone pour la scène</button>
         <div class="remote-code">
           <div class="card-row"><svg class="ic muted"><use href="#i-screen"/></svg><span class="muted">Nom de cet appareil</span></div>
           <input type="text" id="s-device" placeholder="ex : iPad scène" maxlength="30">
           <div class="muted small" id="s-remote-status"></div>
         </div>
-        <p class="muted small">Clavier / pédale Bluetooth : Espace = lecture/pause · flèche bas / Page suivante = avancer · flèche haut / Page précédente = reculer · flèches droite / gauche = morceau suivant / précédent · + / − = vitesse</p>
+        <p class="muted small">Clavier / pédale Bluetooth : Espace = lecture/pause · flèche bas / Page suivante = avancer (ligne suivante en mode ligne) · flèche haut / Page précédente = reculer · flèches droite / gauche = morceau suivant / précédent · + / − = vitesse</p>
       </div>
     </div>
   </div>

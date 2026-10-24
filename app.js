@@ -42,7 +42,8 @@ const defaults = {
   font: window.innerWidth < 500 ? 48 : 72,
   speed: 15, lh: 1.35, margin: 6, guide: 30, count: 3,
   align: 'left', theme: 'dark', mirror: false, flip: false, upper: false,
-  showguide: true, autonext: false, deviceId: uuid(), deviceName: guessDevice()
+  showguide: true, autonext: false, deviceId: uuid(), deviceName: guessDevice(),
+  mode: 'scroll', chords: true, fit: true, timer: false
 };
 const prefs = Object.assign({}, defaults, store.get('pr_prefs', {}));
 delete prefs.code;
@@ -93,6 +94,7 @@ function modal({ title, message = '', icon = null, danger = false, input = null,
   $('#modal-title').textContent = title;
   $('#modal-msg').textContent = message;
   $('#modal-msg').classList.toggle('hidden', !message);
+  $('#modal-msg').classList.toggle('long', message.includes('\n'));
   inp.classList.toggle('hidden', !input);
   if (input) {
     inp.type = input.type || 'text';
@@ -248,8 +250,10 @@ function openEdit(id) {
   const t = id ? db.textes[id] : null;
   const edit = canEdit();
   $('#edit-titre').value = t ? t.titre : '';
-  $('#edit-contenu').value = t ? t.contenu : '';
-  $('#edit-titre').readOnly = $('#edit-contenu').readOnly = !edit;
+  // les notes « // » sont réservées aux admins : un membre ne les voit pas
+  $('#edit-contenu').value = t ? (edit ? t.contenu : t.contenu.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')) : '';
+  $('#edit-titre').readOnly = $('#edit-contenu').readOnly = $('#edit-duree').readOnly = !edit;
+  $('#edit-duree').value = t && t.reglages && t.reglages.duree ? fmtTime(t.reglages.duree) : '';
   $('#edit-ro').classList.toggle('hidden', edit);
   $('#edit-import-btn').classList.toggle('hidden', !edit);
   $('#edit-delete').classList.toggle('hidden', !t || !edit);
@@ -262,21 +266,42 @@ function updateStats() {
   const words = (c.match(/\S+/g) || []).length;
   $('#edit-stats').textContent = `${words} mot${words > 1 ? 's' : ''}`;
 }
+// « 3:40 », « 3m40 », « 220 » (secondes) → secondes
+function parseDuree(v) {
+  v = (v || '').trim();
+  if (!v) return 0;
+  const m = v.match(/^(\d{1,3})\s*[:.hm'’ ]\s*(\d{1,2})\s*s?$/i);
+  if (m) return +m[1] * 60 + +m[2];
+  if (/^\d+$/.test(v)) return +v >= 20 ? +v : +v * 60;   // « 4 » = 4 minutes, « 220 » = 220 s
+  return 0;
+}
 function flushEdit() {
   clearTimeout(editTimer);
   let t = editId ? db.textes[editId] : null;
   if (!canEdit()) return t;
   const titre = $('#edit-titre').value, contenu = $('#edit-contenu').value;
+  const d = parseDuree($('#edit-duree').value);
   if (!t) {
     if (!titre.trim() && !contenu.trim()) return null;
     t = { id: uuid(), titre: '', contenu: '', reglages: {}, supprime: false, created_at: nowIso(), equipe_id: scopeId() };
     db.textes[t.id] = t; editId = t.id;
     $('#edit-delete').classList.remove('hidden');
   }
-  if (t.titre !== titre || t.contenu !== contenu) { t.titre = titre; t.contenu = contenu; touchTexte(t); }
+  const oldD = (t.reglages && +t.reglages.duree) || 0;
+  if (t.titre !== titre || t.contenu !== contenu || oldD !== d) {
+    t.titre = titre; t.contenu = contenu;
+    t.reglages = Object.assign({}, t.reglages);
+    if (d) t.reglages.duree = d; else delete t.reglages.duree;
+    touchTexte(t);
+  }
   return t;
 }
-['#edit-titre', '#edit-contenu'].forEach(s => $(s).addEventListener('input', () => {
+$('#edit-duree').addEventListener('blur', () => {
+  const d = parseDuree($('#edit-duree').value);
+  if ($('#edit-duree').value.trim() && !d) return toast('Durée non reconnue (ex : 3:40)');
+  $('#edit-duree').value = d ? fmtTime(d) : '';
+});
+['#edit-titre', '#edit-contenu', '#edit-duree'].forEach(s => $(s).addEventListener('input', () => {
   updateStats(); clearTimeout(editTimer); editTimer = setTimeout(flushEdit, 500);
 }));
 $('#edit-import').addEventListener('change', async (e) => {
@@ -374,45 +399,147 @@ function renderPicker() {
 /* ================= PROMPTEUR ================= */
 const P = {
   queue: [], idx: 0, pos: 0, playing: false, raf: 0, last: 0,
-  speed: prefs.speed, uiTimer: 0, counting: false, countTimer: 0, autoTimer: 0, saveTimer: 0,
-  vel: 0, wake: null, open: false
+  speed: prefs.speed, uiTimer: 0, counting: false, countTimer: 0, autoTimer: 0, saveTimers: {},
+  vel: 0, wake: null, open: false,
+  transpo: 0, fit: false, elapsed: 0, li: 0, lines: [], steps: [], sections: [], totalWords: 1, hasCh: false
 };
-const pScroll = $('#p-scroll'), pText = $('#p-text'), pUi = $('#p-ui');
+const pScroll = $('#p-scroll'), pText = $('#p-text'), pUi = $('#p-ui'), pLines = $('#p-lines');
 
-function renderMarkup(s) {
-  return s.split('\n').map(line => {
-    if (/^\s*#/.test(line)) return `<span class="ln sec">${esc(line.replace(/^\s*#+\s*/, ''))}</span>`;
-    const html = esc(line).replace(/\[([^\]\n]*)\]/g, '<span class="cue">[$1]</span>');
-    return `<span class="ln">${html || ' '}</span>`;
-  }).join('');
+/* --- accords et transposition --- */
+const ROOT = '(Do|Ré|Re|Mi|Fa|Sol|La|Si|[A-G])([#b♯♭]?)';
+const CHORD_RE = new RegExp(`^${ROOT}((?:m|min|maj|M|dim|aug|sus|add|°|ø|\\+|-|#|b|\\d|\\(|\\))*)(?:\\/${ROOT})?$`);
+const NOTES = {
+  en: { sharp: ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'], flat: ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'],
+        usual: ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'] },
+  fr: { sharp: ['Do', 'Do#', 'Ré', 'Ré#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'], flat: ['Do', 'Réb', 'Ré', 'Mib', 'Mi', 'Fa', 'Solb', 'Sol', 'Lab', 'La', 'Sib', 'Si'],
+        usual: ['Do', 'Do#', 'Ré', 'Mib', 'Mi', 'Fa', 'Fa#', 'Sol', 'Lab', 'La', 'Sib', 'Si'] }
+};
+const BASE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11, Do: 0, 'Ré': 2, Re: 2, Mi: 4, Fa: 5, Sol: 7, La: 9, Si: 11 };
+function isChord(txt) { return CHORD_RE.test(txt.trim()); }
+function shiftNote(root, acc, n) {
+  const fr = !/^[A-G]$/.test(root);
+  let i = BASE[root] + (acc === '#' || acc === '♯' ? 1 : acc === 'b' || acc === '♭' ? -1 : 0);
+  i = (((i + n) % 12) + 12) % 12;
+  // on garde l'écriture d'origine (# ou b) ; sinon l'usage courant : Bb, Eb, Ab mais F#, C#
+  const kind = (acc === 'b' || acc === '♭') ? 'flat' : (acc === '#' || acc === '♯') ? 'sharp' : 'usual';
+  const table = NOTES[fr ? 'fr' : 'en'][kind];
+  return table[i];
+}
+function transposeChord(ch, n) {
+  const m = ch.trim().match(CHORD_RE);
+  if (!m || !n) return ch.trim();
+  let out = shiftNote(m[1], m[2], n) + m[3];
+  if (m[4]) out += '/' + shiftNote(m[4], m[5], n);
+  return out;
 }
 
+// Une ligne de texte : accords [Am] au-dessus des mots, indications [Guitare seule] en couleur.
+function renderLine(line, o) {
+  const parts = [];             // {t:'txt'|'chord'|'cue', v}
+  let last = 0;
+  line.replace(/\[([^\]\n]*)\]/g, (all, inner, idx) => {
+    if (idx > last) parts.push({ t: 'txt', v: line.slice(last, idx) });
+    parts.push({ t: isChord(inner) ? 'chord' : 'cue', v: inner });
+    last = idx + all.length;
+  });
+  if (last < line.length) parts.push({ t: 'txt', v: line.slice(last) });
+  const chords = parts.filter(x => x.t === 'chord');
+  const words = parts.filter(x => x.t === 'txt').map(x => x.v).join('').trim();
+  const cue = (v) => `<span class="cue">[${esc(v)}]</span>`;
+  if (!chords.length || !o.chords) {
+    const html = parts.filter(x => x.t !== 'chord').map(x => x.t === 'cue' ? cue(x.v) : esc(x.v)).join('');
+    return { html: `<span class="ln">${html.trim() ? html : ' '}</span>`, words, empty: !html.trim() };
+  }
+  // ligne composée uniquement d'accords (intro, pont instrumental…)
+  if (!words) {
+    const html = parts.map(x => x.t === 'chord' ? `<span class="ch-inline">${esc(transposeChord(x.v, o.transpo))}</span>` : x.t === 'cue' ? cue(x.v) : ' ').join(' ');
+    return { html: `<span class="ln chline">${html}</span>`, words: '', empty: false };
+  }
+  // chaque accord est collé au mot qui le suit : il reste au-dessus de ce mot même si la ligne est coupée
+  let html = '', pending = null;
+  const block = (ch, word) => `<span class="cw"><span class="ch">${esc(transposeChord(ch, o.transpo))}</span>${word ? esc(word) : '&nbsp;'}</span>`;
+  for (const x of parts) {
+    if (x.t === 'chord') {
+      if (pending !== null) html += block(pending, '') + ' ';
+      pending = x.v;
+    } else if (x.t === 'txt' && pending !== null) {
+      const m = x.v.match(/^(\S*)([\s\S]*)$/);
+      html += block(pending, m[1]) + esc(m[2]);
+      pending = null;
+    } else {
+      if (pending !== null) { html += block(pending, '') + ' '; pending = null; }
+      html += x.t === 'cue' ? cue(x.v) : esc(x.v);
+    }
+  }
+  if (pending !== null) html += block(pending, '');
+  return { html: `<span class="ln has-ch">${html}</span>`, words, empty: false };
+}
+
+// Texte complet → lignes. « # Refrain » = section, « // note » = note visible des admins seulement.
+function parseText(s, o) {
+  const out = [];
+  for (const line of (s || '').split('\n')) {
+    if (/^\s*\/\//.test(line)) {
+      if (o.notes) out.push({ kind: 'note', html: `<span class="ln note">${ic('crown')}${esc(line.replace(/^\s*\/\/\s*/, ''))}</span>`, words: '' });
+      continue;
+    }
+    if (/^\s*#/.test(line)) {
+      const name = line.replace(/^\s*#+\s*/, '');
+      out.push({ kind: 'sec', name, html: `<span class="ln sec">${esc(name)}</span>`, words: '' });
+      continue;
+    }
+    const r = renderLine(line, o);
+    out.push({ kind: r.empty ? 'empty' : 'line', html: r.html, words: r.words });
+  }
+  return out;
+}
+function textHasChords(s) {
+  return /\[([^\]\n]*)\]/.test(s || '') && [...(s || '').matchAll(/\[([^\]\n]*)\]/g)].some(m => isChord(m[1]));
+}
+const wordCount = (s) => (s.match(/\S+/g) || []).length;
+
+const isLine = () => prefs.mode === 'line';
 function vh() { return pScroll.clientHeight; }
 function maxPos() { return Math.max(0, pText.offsetHeight - vh()); }
-function pxPerSec() { return P.speed * prefs.font * 0.04; }
+function duree() { const t = curTexte(); return (t && t.reglages && +t.reglages.duree) || 0; }
+// Vitesse en pixels/s : calée sur la durée du morceau si demandé, sinon réglage manuel.
+function pxPerSec() {
+  if (P.fit && duree() && maxPos() > 0) return maxPos() / duree();
+  return P.speed * prefs.font * 0.04;
+}
+// Mode ligne : temps passé sur une ligne (proportionnel à son nombre de mots).
+function lineDur(st) {
+  const w = Math.max(1, st.words);
+  if (P.fit && duree()) return Math.max(0.8, duree() * w / P.totalWords);
+  return Math.max(1.2, w * 60 / (P.speed * 8));
+}
 
 function applyStyle() {
   const v = $('#v-prompter');
   v.classList.remove('th-dark', 'th-yellow', 'th-light');
   v.classList.add('th-' + prefs.theme);
   pScroll.className = 'p-scroll th-' + prefs.theme;
-  pText.style.fontSize = prefs.font + 'px';
-  pText.style.lineHeight = prefs.lh;
-  pText.style.paddingLeft = pText.style.paddingRight = prefs.margin + 'vw';
-  pText.style.textAlign = prefs.align;
-  pText.style.textTransform = prefs.upper ? 'uppercase' : 'none';
+  pLines.className = 'p-lines th-' + prefs.theme + (isLine() ? '' : ' hidden');
+  pScroll.classList.toggle('hidden', isLine());
+  for (const el of [pText, $('#pl-inner')]) {
+    el.style.fontSize = prefs.font + 'px';
+    el.style.lineHeight = prefs.lh;
+    el.style.paddingLeft = el.style.paddingRight = prefs.margin + 'vw';
+    el.style.textAlign = isLine() && el !== pText ? 'center' : prefs.align;
+    el.style.textTransform = prefs.upper ? 'uppercase' : 'none';
+  }
   pText.style.paddingTop = (prefs.guide / 100 * vh()) + 'px';
   pText.style.paddingBottom = ((1 - prefs.guide / 100) * vh()) + 'px';
   const tf = [];
   if (prefs.mirror) tf.push('scaleX(-1)');
   if (prefs.flip) tf.push('scaleY(-1)');
-  pScroll.style.transform = tf.join(' ');
+  pScroll.style.transform = pLines.style.transform = tf.join(' ');
   const g = $('#p-guide');
-  g.classList.toggle('hidden', !prefs.showguide);
+  g.classList.toggle('hidden', !prefs.showguide || isLine());
   const half = prefs.font * prefs.lh * 0.5;
   g.style.top = (prefs.flip ? 100 - prefs.guide : prefs.guide) + '%';
   g.style.marginTop = (prefs.flip ? -half : half) + 'px';
-  setPos(P.pos);
+  if (isLine()) setLine(P.li); else setPos(P.pos);
 }
 
 function setPos(p) {
@@ -423,14 +550,65 @@ function setPos(p) {
   updateMeta();
 }
 
+// Mode « une ligne à la fois » : ligne précédente, section, ligne en cours (grande), ligne suivante.
+function setLine(i) {
+  const n = P.steps.length;
+  P.li = clamp(i, 0, Math.max(0, n - 1));
+  const st = P.steps[P.li], prev = P.steps[P.li - 1], next = P.steps[P.li + 1];
+  $('#pl-prev').innerHTML = prev ? prev.html : '';
+  $('#pl-sec').textContent = st && st.sec ? st.sec : '';
+  $('#pl-cur').innerHTML = st ? st.html : '';
+  $('#pl-next').innerHTML = next ? next.html : '';
+  $('#p-prog').style.width = (n > 1 ? P.li / (n - 1) * 100 : 0) + '%';
+  updateMeta();
+}
+
 function curTexte() { return db.textes[P.queue[P.idx]]; }
+function curSection() {
+  if (!P.sections.length) return -1;
+  if (isLine()) { const st = P.steps[P.li]; return st ? st.secIdx : -1; }
+  let k = -1;
+  P.sections.forEach((s, i) => { if (sectionPos(s) <= P.pos + 2) k = i; });
+  return k;
+}
+function sectionPos(s) { return s.el ? s.el.offsetTop - parseFloat(pText.style.paddingTop || 0) : 0; }
+
+// Construit l'affichage du texte courant (accords, transposition, notes admin, sections, lignes).
+function renderSong(keep) {
+  const t = curTexte();
+  const ratio = keep && maxPos() ? P.pos / maxPos() : 0;
+  P.lines = parseText(t.contenu || '', { chords: prefs.chords, transpo: P.transpo, notes: canEdit() });
+  pText.innerHTML = P.lines.map(l => l.html).join('');
+  const secEls = pText.querySelectorAll('.sec');
+  P.sections = []; P.steps = [];
+  let si = 0, cur = '', curIdx = -1;
+  P.lines.forEach((l, i) => {
+    if (l.kind === 'sec') {
+      P.sections.push({ name: l.name, el: secEls[si++], line: i, step: null });
+      cur = l.name; curIdx = P.sections.length - 1;
+      return;
+    }
+    if (l.kind === 'empty') return;
+    const sec = P.sections[curIdx];
+    if (sec && sec.step === null) sec.step = P.steps.length;
+    P.steps.push({ html: l.html, words: wordCount(l.words || ''), sec: cur, secIdx: curIdx });
+  });
+  P.sections.forEach(s => { if (s.step === null) s.step = P.steps.length - 1; });
+  P.totalWords = P.steps.reduce((n, st) => n + Math.max(1, st.words), 0) || 1;
+  P.hasCh = textHasChords(t.contenu);
+  $('#p-sec-btn').classList.toggle('hidden', !P.sections.length);
+  if (keep && !isLine()) setTimeout(() => setPos(ratio * maxPos()), 0);
+}
 
 function loadSong(i) {
   P.idx = clamp(i, 0, P.queue.length - 1);
   const t = curTexte();
-  pText.innerHTML = renderMarkup(t.contenu || '');
-  P.speed = (t.reglages && t.reglages.vitesse) || prefs.speed;
-  P.pos = 0;
+  const r = t.reglages || {};
+  P.speed = r.vitesse || prefs.speed;
+  P.transpo = r.transpo || 0;
+  P.fit = !!(prefs.fit && +r.duree);
+  P.pos = 0; P.li = 0; P.elapsed = 0;
+  renderSong(false);
   $('#p-title').textContent = t.titre || 'Sans titre';
   $('#p-prev').disabled = P.idx === 0;
   $('#p-next').disabled = P.idx >= P.queue.length - 1;
@@ -438,24 +616,57 @@ function loadSong(i) {
   clearTimeout(P.autoTimer);
   applyStyle();
   updateSpeedLabel();
+  renderTimer();
   trackPresence();
   sendState(true);
 }
 
+function fmtTime(sec) {
+  sec = Math.max(0, Math.round(sec));
+  return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+}
+function remainingTime() {
+  if (isLine()) {
+    let r = 0;
+    for (let k = P.li; k < P.steps.length; k++) r += lineDur(P.steps[k]);
+    return r;
+  }
+  return pxPerSec() ? Math.max(0, (maxPos() - P.pos) / pxPerSec()) : 0;
+}
 function updateMeta() {
   const d = new Date();
   const clock = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-  const rest = pxPerSec() ? Math.max(0, (maxPos() - P.pos) / pxPerSec()) : 0;
-  const mm = Math.floor(rest / 60), ss = Math.floor(rest % 60).toString().padStart(2, '0');
   const parts = [];
   if (P.queue.length > 1) parts.push(`${P.idx + 1}/${P.queue.length}`);
-  parts.push(`reste ${mm}:${ss}`, clock);
+  parts.push(`reste ${fmtTime(remainingTime())}`, clock);
   $('#p-meta').textContent = parts.join(' · ');
 }
 
+// Minuteur : temps restant (si une durée est indiquée) ou temps écoulé, toujours visible.
+function renderTimer() {
+  const el = $('#p-timer');
+  el.classList.toggle('hidden', !prefs.timer || !P.open);
+  if (!prefs.timer) return;
+  const target = duree();
+  el.classList.remove('warn', 'over');
+  if (target) {
+    const left = target - P.elapsed;
+    el.innerHTML = ic('clock') + (left < 0 ? '+' + fmtTime(-left) : fmtTime(left));
+    if (left < 0) el.classList.add('over');
+    else if (left <= Math.max(15, target * 0.1)) el.classList.add('warn');
+  } else el.innerHTML = ic('clock') + fmtTime(P.elapsed);
+}
+let timerLast = 0;
+setInterval(() => {
+  const now = Date.now();
+  if (P.open && P.playing && timerLast) P.elapsed += (now - timerLast) / 1000;
+  timerLast = now;
+  if (P.open) renderTimer();
+}, 250);
+
 let shownPlaying = null;
 function updateSpeedLabel() {
-  $('#p-speed').textContent = P.speed;
+  $('#p-speed').textContent = P.fit ? `auto (${fmtTime(duree())})` : P.speed;
   const on = P.playing || P.counting;
   if (on !== shownPlaying) { setIcon($('#p-play'), on ? 'pause' : 'play'); shownPlaying = on; }
 }
@@ -474,6 +685,7 @@ function startPrompter(ids, i) {
 function closePrompter() {
   pause();
   P.open = false;
+  renderTimer();
   releaseWake();
   untrackPresence();
   sendState(true);
@@ -481,7 +693,7 @@ function closePrompter() {
 }
 
 function tick(t) {
-  if (!P.playing) return;
+  if (!P.playing || isLine()) return;
   const dt = Math.min(0.1, (t - (P.last || t)) / 1000);
   P.last = t;
   if (!P.dragging) {
@@ -490,17 +702,34 @@ function tick(t) {
   }
   P.raf = requestAnimationFrame(tick);
 }
+function scheduleLine() {
+  clearTimeout(P.lineTimer);
+  if (!P.playing || !isLine() || !P.steps.length) return;
+  P.lineTimer = setTimeout(() => {
+    if (P.li >= P.steps.length - 1) { onEnd(); return; }
+    setLine(P.li + 1); sendState(); scheduleLine();
+  }, lineDur(P.steps[P.li]) * 1000);
+}
+
+function atStart() {
+  if (isLine()) return P.li === 0;
+  const first = P.sections[0];
+  return P.pos < 2 || (first && first.line === 0 && Math.abs(P.pos - sectionPos(first)) < 2);
+}
+function atEnd() { return isLine() ? P.li >= P.steps.length - 1 && P.ended : P.pos >= maxPos() - 1; }
+function toStart() { if (isLine()) setLine(0); else setPos(0); }
 
 function play() {
   if (P.playing || P.counting) return;
-  if (P.pos >= maxPos() - 1) setPos(0);
+  if (atEnd()) toStart();
+  P.ended = false;
   $('#p-endcard').classList.add('hidden');
-  if (P.pos < 2 && prefs.count > 0) return countdown(prefs.count);
+  if (atStart() && prefs.count > 0) return countdown(prefs.count);
   reallyPlay();
 }
 function reallyPlay() {
   P.playing = true; P.last = 0;
-  P.raf = requestAnimationFrame(tick);
+  if (isLine()) scheduleLine(); else P.raf = requestAnimationFrame(tick);
   updateSpeedLabel(); fadeUiSoon(); sendState(true); trackPresence();
 }
 function countdown(n) {
@@ -515,7 +744,7 @@ function countdown(n) {
 }
 function pause() {
   const was = P.playing || P.counting;
-  P.playing = false; cancelAnimationFrame(P.raf);
+  P.playing = false; cancelAnimationFrame(P.raf); clearTimeout(P.lineTimer);
   if (P.counting) { P.counting = false; clearTimeout(P.countTimer); $('#p-count').classList.add('hidden'); }
   updateSpeedLabel(); showUi(); sendState(true);
   if (was) trackPresence();
@@ -524,6 +753,7 @@ function toggle() { (P.playing || P.counting) ? pause() : play(); }
 
 function onEnd() {
   pause();
+  P.ended = true;
   if (P.idx < P.queue.length - 1) {
     const next = db.textes[P.queue[P.idx + 1]];
     $('#p-endtitle').textContent = 'Suivant : ' + (next.titre || 'Sans titre');
@@ -540,18 +770,66 @@ function goSong(i, autoplay) {
   if (was) play();
 }
 
-function changeSpeed(d) {
-  P.speed = clamp(P.speed + d, 1, 60);
-  updateSpeedLabel(); updateMeta(); sendState(true);
-  clearTimeout(P.saveTimer);
-  P.saveTimer = setTimeout(() => {
-    const t = curTexte(); if (!t) return;
-    t.reglages = Object.assign({}, t.reglages, { vitesse: P.speed });
-    // Un membre garde sa vitesse sur son appareil ; l'admin la sauvegarde pour toute l'équipe.
+// Réglage propre à la chanson (vitesse, tonalité) : l'admin le partage, un membre le garde pour lui.
+function saveSongSetting(key, val) {
+  clearTimeout(P.saveTimers[key]);
+  P.saveTimers[key] = setTimeout(() => {
+    const t = curTexte(); if (!t || t.id === DEMO_ID) return;
+    t.reglages = Object.assign({}, t.reglages, { [key]: val });
     if (canEdit()) touchTexte(t); else db.save();
   }, 1500);
 }
-function nudge(fraction) { setPos(P.pos + vh() * fraction); sendState(true); }
+function changeSpeed(d) {
+  if (P.fit) {
+    // on reprend la main : on part de la vitesse calée actuelle
+    P.speed = clamp(Math.round(pxPerSec() / (prefs.font * 0.04)), 1, 60);
+    P.fit = false;
+    toast('Vitesse manuelle');
+  }
+  P.speed = clamp(P.speed + d, 1, 60);
+  updateSpeedLabel(); updateMeta(); sendState(true);
+  if (isLine() && P.playing) scheduleLine();
+  saveSongSetting('vitesse', P.speed);
+}
+function changeTranspo(d) {
+  if (!P.hasCh) return;
+  P.transpo = ((P.transpo + d + 17) % 12) - 5;   // de -5 à +6 demi-tons
+  renderSong(true);
+  if (isLine()) setLine(P.li);
+  renderSettings();
+  toast(P.transpo ? `Tonalité ${P.transpo > 0 ? '+' : ''}${P.transpo}` : 'Tonalité d\'origine');
+  sendState(true);
+  saveSongSetting('transpo', P.transpo);
+}
+function nudge(fraction) {
+  if (isLine()) { setLine(P.li + (fraction > 0 ? 1 : -1)); if (P.playing) scheduleLine(); }
+  else setPos(P.pos + vh() * fraction);
+  sendState(true);
+}
+function gotoSection(i) {
+  const s = P.sections[i]; if (!s) return;
+  if (isLine()) { setLine(s.step); if (P.playing) scheduleLine(); }
+  else setPos(sectionPos(s));
+  $('#p-endcard').classList.add('hidden');
+  sendState(true);
+}
+
+/* --- sections --- */
+$('#p-sec-btn').onclick = () => {
+  const ul = $('#p-sec-list'); ul.innerHTML = '';
+  const cur = curSection();
+  P.sections.forEach((s, i) => {
+    const li = document.createElement('li');
+    li.className = i === cur ? 'checked' : '';
+    li.innerHTML = `<span class="li-num">${i + 1}</span><div class="li-main"><div class="li-title"></div></div>${ic('chevron')}`;
+    li.querySelector('.li-title').textContent = s.name;
+    li.onclick = () => { $('#p-secsheet').classList.add('hidden'); gotoSection(i); };
+    ul.appendChild(li);
+  });
+  $('#p-secsheet').classList.remove('hidden');
+};
+$('#p-secsheet-done').onclick = () => $('#p-secsheet').classList.add('hidden');
+$('#p-secsheet').addEventListener('click', (e) => { if (e.target.id === 'p-secsheet') $('#p-secsheet').classList.add('hidden'); });
 
 /* --- affichage des commandes --- */
 function showUi() { pUi.classList.remove('faded'); clearTimeout(P.uiTimer); }
@@ -592,6 +870,18 @@ pScroll.addEventListener('touchend', () => {
 });
 pScroll.addEventListener('click', () => { if (performance.now() - lastTouchEnd > 800) toggle(); });
 pScroll.addEventListener('wheel', (e) => { e.preventDefault(); setPos(P.pos + e.deltaY * (prefs.flip ? -1 : 1)); }, { passive: false });
+// mode ligne : toucher = lecture/pause, glisser vers le haut = ligne suivante, vers le bas = précédente
+let lStart = null;
+pLines.addEventListener('touchstart', (e) => { lStart = { y: e.touches[0].clientY, t: performance.now() }; }, { passive: true });
+pLines.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+pLines.addEventListener('touchend', (e) => {
+  if (!lStart) return;
+  const dy = (e.changedTouches[0].clientY - lStart.y) * (prefs.flip ? -1 : 1);
+  lStart = null; lastTouchEnd = performance.now();
+  if (Math.abs(dy) > 40) nudge(dy < 0 ? 1 : -1); else toggle();
+});
+pLines.addEventListener('click', () => { if (performance.now() - lastTouchEnd > 800) toggle(); });
+pLines.addEventListener('wheel', (e) => { e.preventDefault(); if (Math.abs(e.deltaY) > 20) nudge(e.deltaY > 0 ? 1 : -1); }, { passive: false });
 pUi.addEventListener('touchstart', () => { if (!pUi.classList.contains('faded')) { showUi(); if (P.playing) fadeUiSoon(); } }, { passive: true });
 
 $('#p-play').onclick = toggle;
@@ -605,7 +895,8 @@ $('#p-close').onclick = closePrompter;
 /* --- clavier et pédales Bluetooth --- */
 document.addEventListener('keydown', (e) => {
   if (!P.open) return;
-  if (!$('#p-settings').classList.contains('hidden') && e.key !== 'Escape') return;
+  const sheetOpen = !$('#p-settings').classList.contains('hidden') || !$('#p-secsheet').classList.contains('hidden');
+  if (sheetOpen && e.key !== 'Escape') return;
   const k = e.key;
   let handled = true;
   if (k === ' ' || k === 'Enter' || k === 'k') toggle();
@@ -615,8 +906,10 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'ArrowLeft') goSong(P.idx - 1);
   else if (k === '+' || k === '=') changeSpeed(1);
   else if (k === '-' || k === '_') changeSpeed(-1);
-  else if (k === 'Home') setPos(0);
-  else if (k === 'Escape') { if (!$('#p-settings').classList.contains('hidden')) closeSettings(); else closePrompter(); }
+  else if (k === 'Home') toStart();
+  else if (k === 'Escape') {
+    if (sheetOpen) { closeSettings(); $('#p-secsheet').classList.add('hidden'); } else closePrompter();
+  }
   else handled = false;
   if (handled) e.preventDefault();
 });
@@ -659,7 +952,8 @@ const fmt = {
   font: v => v + ' px', speed: v => v, lh: v => (+v).toFixed(2), margin: v => v + ' %',
   guide: v => v + ' %', count: v => +v ? v + ' s' : 'aucun'
 };
-const checks = { mirror: 's-mirror', flip: 's-flip', upper: 's-upper', showguide: 's-showguide', autonext: 's-autonext' };
+const checks = { mirror: 's-mirror', flip: 's-flip', upper: 's-upper', showguide: 's-showguide', autonext: 's-autonext',
+  chords: 's-chords', fit: 's-fit', timer: 's-timer' };
 
 function renderSettings() {
   for (const [k, id] of Object.entries(sliders)) {
@@ -669,6 +963,9 @@ function renderSettings() {
   for (const [k, id] of Object.entries(checks)) $('#' + id).checked = !!prefs[k];
   $$('#s-align button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.align));
   $$('#s-theme button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.theme));
+  $$('#s-mode button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.mode));
+  $('#s-tr-row').classList.toggle('hidden', !P.hasCh);
+  $('#s-tr-v').textContent = (P.transpo > 0 ? '+' : '') + P.transpo;
   $('#s-device').value = prefs.deviceName;
   const t = team.current();
   $('#s-remote-status').textContent = !session || !t
@@ -686,8 +983,27 @@ for (const [k, id] of Object.entries(sliders)) {
   });
 }
 for (const [k, id] of Object.entries(checks)) {
-  $('#' + id).addEventListener('change', (e) => { prefs[k] = e.target.checked; savePrefs(); applyStyle(); });
+  $('#' + id).addEventListener('change', (e) => {
+    prefs[k] = e.target.checked; savePrefs();
+    if (k === 'chords') renderSong(true);
+    if (k === 'fit') { P.fit = !!(prefs.fit && duree()); updateSpeedLabel(); if (isLine() && P.playing) scheduleLine(); }
+    if (k === 'timer') renderTimer();
+    applyStyle(); sendState();
+  });
 }
+// changement de mode : on garde à peu près l'endroit où on en était
+$$('#s-mode button').forEach(b => b.onclick = () => {
+  if (prefs.mode === b.dataset.v) return;
+  const ratio = isLine() ? (P.steps.length > 1 ? P.li / (P.steps.length - 1) : 0) : (maxPos() ? P.pos / maxPos() : 0);
+  pause();
+  prefs.mode = b.dataset.v; savePrefs();
+  applyStyle();
+  if (isLine()) setLine(Math.round(ratio * Math.max(0, P.steps.length - 1)));
+  else setTimeout(() => setPos(ratio * maxPos()), 0);
+  renderSettings(); sendState();
+});
+$('#s-tr-minus').onclick = () => changeTranspo(-1);
+$('#s-tr-plus').onclick = () => changeTranspo(1);
 $$('#s-align button').forEach(b => b.onclick = () => { prefs.align = b.dataset.v; savePrefs(); applyStyle(); renderSettings(); });
 $$('#s-theme button').forEach(b => b.onclick = () => { prefs.theme = b.dataset.v; savePrefs(); applyStyle(); renderSettings(); });
 $('#s-device').addEventListener('change', (e) => {
@@ -723,7 +1039,12 @@ function mergeRemote(map, rows) {
     if (!l || l.equipe_id !== r.equipe_id || (!l._dirty && ts(r.updated_at) !== ts(l.updated_at)) || (l._dirty && ts(r.updated_at) > ts(l.updated_at))) {
       const { user_id, ...rest } = r;
       // un membre garde sa vitesse personnelle
-      if (l && l.reglages && l.reglages.vitesse && !canEdit()) rest.reglages = Object.assign({}, rest.reglages, { vitesse: l.reglages.vitesse });
+      if (l && l.reglages && !canEdit()) {
+        const mine = {};
+        if (l.reglages.vitesse) mine.vitesse = l.reglages.vitesse;
+        if (l.reglages.transpo) mine.transpo = l.reglages.transpo;
+        rest.reglages = Object.assign({}, rest.reglages, mine);
+      }
       map[r.id] = Object.assign(rest, { _dirty: false });
       changed = true;
     }
@@ -1204,12 +1525,32 @@ async function remoteCommand(c) {
   else if (a === 'speed-') changeSpeed(-1);
   else if (a === 'fwd') nudge(0.35);
   else if (a === 'back') nudge(-0.35);
-  else if (a === 'top') { pause(); setPos(0); }
+  else if (a === 'top') { pause(); toStart(); }
   else if (a === 'next') goSong(P.idx + 1);
   else if (a === 'prev') goSong(P.idx - 1);
   else if (a === 'goto') goSong(+c.i);
-  else if (a === 'close') { closePrompter(); sendState(true); return; }
+  else if (a === 'section') gotoSection(+c.i);
+  else if (a === 'tr+') changeTranspo(1);
+  else if (a === 'tr-') changeTranspo(-1);
+  else if (a === 'close') { showBy(c); closePrompter(); sendState(true); return; }
+  showBy(c);
   sendState(true);
+}
+
+// Plusieurs télécommandes : on affiche brièvement qui a envoyé la commande.
+const CMD_LABEL = {
+  toggle: () => (P.playing || P.counting) ? 'Lecture' : 'Pause', 'speed+': () => 'Vitesse +', 'speed-': () => 'Vitesse −',
+  fwd: () => 'Avancer', back: () => 'Reculer', top: () => 'Début', next: () => 'Morceau suivant', prev: () => 'Morceau précédent',
+  goto: () => 'Changement de morceau', section: () => 'Section', 'tr+': () => 'Tonalité +', 'tr-': () => 'Tonalité −', close: () => 'Fermeture'
+};
+let byTimer = 0;
+function showBy(c) {
+  if (!c.by) return;
+  P.lastBy = c.by; P.lastByAt = Date.now();
+  const el = $('#p-by');
+  el.textContent = `${(CMD_LABEL[c.a] || (() => 'Commande'))()} · ${c.by}`;
+  el.classList.remove('hidden');
+  clearTimeout(byTimer); byTimer = setTimeout(() => el.classList.add('hidden'), 2200);
 }
 
 // Chaque appareil connecté s'annonce à l'équipe par un message « state » régulier (toutes les
@@ -1238,13 +1579,17 @@ function sendState() {
   }
   const t = curTexte();
   const m = maxPos();
+  const prog = isLine() ? (P.steps.length > 1 ? P.li / (P.steps.length - 1) : 0) : (m ? P.pos / m : 0);
   TC.ch.send({
     type: 'broadcast', event: 'state',
     payload: {
       from: prefs.deviceId, nom: prefs.deviceName, open: true,
       titre: t ? (t.titre || 'Sans titre') : '', idx: P.idx, n: P.queue.length,
-      playing: P.playing || P.counting, speed: P.speed, prog: m ? P.pos / m : 0,
-      songs: P.queue.map(id => (db.textes[id] && db.textes[id].titre) || 'Sans titre')
+      playing: P.playing || P.counting, speed: P.fit ? 'auto' : P.speed, prog,
+      songs: P.queue.map(id => (db.textes[id] && db.textes[id].titre) || 'Sans titre'),
+      line: isLine(), hasCh: P.hasCh, transpo: P.transpo,
+      secs: P.sections.map(x => x.name), sec: curSection(),
+      by: P.lastBy && Date.now() - P.lastByAt < 15000 ? P.lastBy : ''
     }
   });
 }
@@ -1269,7 +1614,7 @@ $$('#rc-launch-tabs button').forEach(b => b.onclick = () => {
 function ping(to) { if (TC.ready) TC.ch.send({ type: 'broadcast', event: 'ping', payload: { to } }); }
 function rcSend(a, extra) {
   if (!TC.ready || !RC.target) return toast('Télécommande non connectée');
-  TC.ch.send({ type: 'broadcast', event: 'cmd', payload: Object.assign({ to: RC.target, a }, extra) });
+  TC.ch.send({ type: 'broadcast', event: 'cmd', payload: Object.assign({ to: RC.target, a, by: prefs.deviceName }, extra) });
   if (navigator.vibrate) navigator.vibrate(15);
 }
 $('#rc-play').onclick = () => rcSend('toggle');
@@ -1368,6 +1713,27 @@ function renderRemote() {
   $('#rc-prog').style.width = (s.prog * 100) + '%';
   if (s.playing !== rcShownPlaying) { setIcon($('#rc-play'), s.playing ? 'pause' : 'play'); rcShownPlaying = s.playing; }
   $('#rc-speed').textContent = s.speed;
+  $('#rc-tr-row').classList.toggle('hidden', !s.hasCh);
+  $('#rc-tr').textContent = (s.transpo > 0 ? '+' : '') + (s.transpo || 0);
+  const fwdBtn = $('[data-rc=fwd]'), backBtn = $('[data-rc=back]');
+  fwdBtn.innerHTML = (s.line ? 'Ligne suivante' : 'Avancer') + ic('forward');
+  backBtn.innerHTML = ic('rewind') + (s.line ? 'Ligne précédente' : 'Reculer');
+  const by = $('#rc-by');
+  by.classList.toggle('hidden', !s.by);
+  by.textContent = s.by ? 'Dernière commande : ' + (s.by === prefs.deviceName ? 'toi' : s.by) : '';
+  const secs = $('#rc-secs');
+  const skey = JSON.stringify([s.secs, s.sec]);
+  if (secs.dataset.key !== skey) {
+    secs.dataset.key = skey; secs.innerHTML = '';
+    (s.secs || []).forEach((name, i) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (i === s.sec ? ' on' : '');
+      b.textContent = name;
+      b.onclick = () => rcSend('section', { i });
+      secs.appendChild(b);
+    });
+  }
+  secs.classList.toggle('hidden', !(s.secs && s.secs.length));
   const ol = $('#rc-songs');
   const key = JSON.stringify([s.songs, s.idx]);
   if (ol.dataset.key === key) return;
@@ -1445,6 +1811,33 @@ Tu es prêt pour la scène.
   startPrompter([DEMO_ID], 0);
   setTimeout(play, 150);
 };
+/* --- préparer le téléphone pour la scène ---
+   Une appli web ne peut pas ouvrir les Réglages de l'iPhone (Apple le réserve aux applis de l'App Store) :
+   on donne donc le chemin exact de chaque réglage. */
+function stageChecklist() {
+  const android = /Android/.test(navigator.userAgent);
+  const steps = android ? [
+    '1. Ne pas déranger : glisse deux fois depuis le haut de l\'écran et touche « Ne pas déranger ».',
+    '2. Mise en veille : Paramètres > Affichage > Mise en veille de l\'écran > le plus long possible.',
+    '3. Luminosité : au maximum, et désactive la luminosité adaptative si l\'écran baisse tout seul.',
+    '4. Batterie : branche le téléphone ou vérifie qu\'il est bien chargé. Désactive l\'économiseur de batterie.',
+    '5. Laisse Prompteur ouvert au premier plan. La télécommande a besoin d\'internet : pas de mode Avion si tu l\'utilises.'
+  ] : [
+    '1. Ne pas déranger : glisse depuis le coin en haut à droite de l\'écran, touche « Concentration » puis « Ne pas déranger ».',
+    '2. Verrouillage automatique : Réglages > Luminosité et affichage > Verrouillage automatique > Jamais.',
+    '3. Luminosité : au maximum dans le même menu. Si elle baisse toute seule : Réglages > Accessibilité > Affichage et taille du texte > désactive « Luminosité automatique ».',
+    '4. Batterie : branche le téléphone ou vérifie qu\'il est bien chargé. Désactive le mode Économie d\'énergie (il peut couper la télécommande).',
+    '5. Laisse Prompteur ouvert au premier plan. La télécommande a besoin d\'internet : pas de mode Avion si tu l\'utilises.'
+  ];
+  return modal({
+    title: 'Avant de monter sur scène', icon: 'check',
+    message: steps.join('\n\n') + '\n\nUne appli web ne peut pas ouvrir ces réglages directement : ouvre l\'app Réglages et suis ces étapes.',
+    buttons: [{ label: 'C\'est prêt', value: true }]
+  });
+}
+$('#s-stage').onclick = () => stageChecklist();
+$('#help-stage').onclick = () => stageChecklist();
+
 // Première ouverture : on propose la notice (sauf si on arrive par un lien d'invitation).
 if (!store.get('pr_notice_vu', false)) {
   store.set('pr_notice_vu', true);
