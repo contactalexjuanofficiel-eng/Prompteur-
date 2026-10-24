@@ -105,3 +105,10 @@ alter policy "prompteur_setlists_delete" on public.prompteur_setlists using (pro
 
 create policy "prompteur_canal_lecture" on realtime.messages for select to authenticated using (prompteur_prive.est_membre_canal(realtime.topic()));
 create policy "prompteur_canal_ecriture" on realtime.messages for insert to authenticated with check (prompteur_prive.est_membre_canal(realtime.topic()));
+
+-- Aperçu du nom de l'équipe à partir d'un code d'invitation (lien « ?rejoindre=CODE »).
+create function public.prompteur_apercu_equipe(p_code text) returns text
+language sql stable security definer set search_path = '' as $$
+  select nom from public.prompteur_equipes where code_invitation = upper(trim(p_code));
+$$;
+grant execute on function public.prompteur_apercu_equipe(text) to anon, authenticated;

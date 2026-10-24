@@ -773,7 +773,7 @@ async function loadTeams(retry = true) {
     id: r.equipe_id, nom: r.prompteur_equipes.nom, code_invitation: r.prompteur_equipes.code_invitation, role: r.role
   })).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   // Nouveau compte : on lui crée son équipe dont il est l'admin.
-  if (!team.list.length && retry) {
+  if (!team.list.length && retry && !store.get('pr_invite', null)) {
     const { error: e2 } = await sb.rpc('prompteur_creer_equipe', { p_nom: 'Mon équipe' });
     if (!e2) return loadTeams(false);
   }
@@ -936,10 +936,11 @@ $('#team-name').addEventListener('change', async (e) => {
 });
 $('#team-share').onclick = async () => {
   const t = team.current(); if (!t) return;
-  const text = `Rejoins l'équipe « ${t.nom} » sur Prompteur : ouvre ${location.origin + location.pathname}, crée ton compte puis entre le code ${t.code_invitation} dans Compte et équipe.`;
+  const url = inviteUrl(t.code_invitation);
+  const text = `Rejoins l'équipe « ${t.nom} » sur Prompteur. Ouvre ce lien (code d'invitation : ${t.code_invitation}) :`;
   try {
-    if (navigator.share) await navigator.share({ title: 'Prompteur', text });
-    else { await navigator.clipboard.writeText(text); toast('Invitation copiée'); }
+    if (navigator.share) await navigator.share({ title: 'Prompteur', text, url });
+    else { await navigator.clipboard.writeText(text + ' ' + url); toast('Invitation copiée'); }
   } catch {}
 };
 $('#team-newcode').onclick = async () => {
@@ -949,17 +950,75 @@ $('#team-newcode').onclick = async () => {
   if (error) return accMsg(frErr(error));
   t.code_invitation = data; team.save(); renderAccount();
 };
-$('#join-btn').onclick = async () => {
-  if (!session) return;
-  const code = $('#join-code').value.trim().toUpperCase();
-  if (code.length < 4) return accMsg('Entre le code d\'invitation donné par ton admin.');
+async function joinWithCode(code) {
+  if (!session) return false;
   accMsg('Connexion à l\'équipe…');
   const { data, error } = await sb.rpc('prompteur_rejoindre', { p_code: code });
-  if (error) return accMsg(frErr(error));
+  if (error) { accMsg(frErr(error)); return false; }
   $('#join-code').value = '';
   await loadTeams(); await selectTeam(data);
-  accMsg(`Tu as rejoint l'équipe « ${(team.current() || {}).nom || ''} ».`);
+  const nom = (team.current() || {}).nom || '';
+  accMsg(`Tu as rejoint l'équipe « ${nom} ».`);
+  toast(`Bienvenue dans l'équipe « ${nom} »`);
+  return true;
+}
+$('#join-btn').onclick = () => {
+  const code = $('#join-code').value.trim().toUpperCase();
+  if (code.length < 4) return accMsg('Entre le code d\'invitation donné par ton admin.');
+  joinWithCode(code);
 };
+
+/* --- lien d'invitation : …/?rejoindre=CODE --- */
+function inviteUrl(code) { return location.origin + location.pathname + '?rejoindre=' + encodeURIComponent(code); }
+(() => {
+  const params = new URLSearchParams(location.search);
+  const code = (params.get('rejoindre') || '').trim().toUpperCase();
+  if (!code) return;
+  store.set('pr_invite', code);
+  params.delete('rejoindre');
+  const q = params.toString();
+  history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash);
+})();
+
+let inviteBusy = false;
+async function handleInvite() {
+  const code = store.get('pr_invite', null);
+  if (!code || !sb || inviteBusy) return;
+  inviteBusy = true;
+  try {
+    const { data: nom } = await sb.rpc('prompteur_apercu_equipe', { p_code: code });
+    if (!nom) {
+      store.set('pr_invite', null);
+      await modal({ title: 'Invitation invalide', icon: 'x', danger: true,
+        message: 'Ce lien d\'invitation n\'est plus valable. Demande un nouveau lien à l\'admin de l\'équipe.',
+        buttons: [{ label: 'OK', value: true }] });
+      return;
+    }
+    if (!session) {
+      // pas encore connecté : le code est gardé et l'équipe sera rejointe après la connexion
+      openAccount();
+      const v = await modal({ title: `Rejoindre « ${nom} »`, icon: 'users',
+        message: 'Connecte-toi ou crée ton compte : tu rejoindras l\'équipe automatiquement juste après.',
+        buttons: [{ label: 'Continuer', value: 'go' }, { label: 'Annuler l\'invitation', value: 'cancel', style: 'ghost' }] });
+      if (v === 'cancel') store.set('pr_invite', null);
+      else setTimeout(() => $('#acc-email').focus(), 50);
+      return;
+    }
+    await loadTeams();
+    const deja = team.list.find(t => t.code_invitation === code);
+    store.set('pr_invite', null);
+    if (deja) {
+      if (deja.id !== team.id) await selectTeam(deja.id);
+      toast(`Tu fais déjà partie de « ${deja.nom} »`);
+      return;
+    }
+    const ok = await modal({ title: `Rejoindre « ${nom} » ?`, icon: 'users',
+      message: `Tu es connecté avec ${session.user.email}. Tu pourras lire les textes de l'équipe, lancer le prompteur et utiliser la télécommande.`,
+      buttons: [{ label: 'Rejoindre l\'équipe', value: true }, { label: 'Plus tard', value: false, style: 'ghost' }] });
+    if (ok) await joinWithCode(code);
+    else { $('#join-code').value = code; }
+  } finally { inviteBusy = false; }
+}
 $('#team-create').onclick = async () => {
   const nom = await promptModal('Nouvelle équipe', 'Tu en seras l\'admin. Tu pourras inviter tes musiciens avec son code.', 'Créer l\'équipe',
     { placeholder: 'Nom de l\'équipe (ex : Mon groupe)', icon: 'users', min: 1, minMsg: 'Donne un nom à l\'équipe' });
@@ -1004,10 +1063,12 @@ if (sb) {
         await loadTeams();
         renderHome(); renderAccount();
         connectTeam();
+        handleInvite();
         await sync();
         if (visible('v-account')) { await loadMembers(); renderAccount(); }
       }, 0);
     }
+    if (!s && event === 'INITIAL_SESSION') setTimeout(handleInvite, 0);
     if (!s && event !== 'INITIAL_SESSION') disconnectTeam();
     renderAccount(); renderHome();
   });
