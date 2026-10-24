@@ -35,6 +35,20 @@ Dans GitHub : **Settings → Pages → Source : GitHub Actions**.
 
 N'importe quel hébergement de fichiers statiques fonctionne aussi (Netlify, Vercel, Cloudflare Pages…) : il n'y a rien à compiler.
 
+## Adresse personnalisée (ex : prompteur.alexjuan.com)
+
+1. Chez ton hébergeur de nom de domaine, ajoute un enregistrement **CNAME** :
+   nom `prompteur` → valeur `contactalexjuanofficiel-eng.github.io`
+2. GitHub → **Settings → Pages → Custom domain** : `prompteur.alexjuan.com` → **Save**,
+   puis coche **Enforce HTTPS** quand GitHub le propose (quelques minutes à quelques heures).
+3. Supabase → **Authentication → URL Configuration → Site URL** : `https://prompteur.alexjuan.com/`
+4. Chacun réinstalle l'icône depuis la nouvelle adresse et se reconnecte une fois
+   (les textes de l'équipe sont en ligne ; seuls les textes jamais synchronisés restent sur l'ancienne adresse).
+
+## Emails
+
+Textes en français et réglage de l'expéditeur : voir `supabase/emails/README.md`.
+
 ## Supabase
 
 Schéma : `supabase/schema.sql` puis `supabase/equipes.sql`. Tables `prompteur_equipes`, `prompteur_membres`,
