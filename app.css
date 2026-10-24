@@ -282,3 +282,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
 .modal-actions .ghost { background: none; color: var(--muted); padding: 10px; }
 @keyframes modal-fade { from { opacity: 0; } }
 @keyframes modal-pop { from { opacity: 0; transform: scale(.94); } }
+
+/* Les pages longues défilent au lieu de tasser leurs éléments */
+.edit-body > *, .rc-pad > *, .settings > * { flex-shrink: 0; }
+#acc-out, #acc-in { display: flex; flex-direction: column; gap: 10px; }
+.file-btn.block { display: flex; align-items: center; justify-content: center; }
+.edit-body hr { margin: 14px 0; }
+.msg { margin: 0; }
+.msg:empty { display: none; }

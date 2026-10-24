@@ -1,5 +1,5 @@
 // Mode hors ligne : l'appli fonctionne sans réseau (sur scène, en salle de mariage…).
-const CACHE = 'prompteur-v4';
+const CACHE = 'prompteur-v5';
 const FILES = ['./', 'index.html', 'app.css', 'app.js', 'config.js', 'vendor/supabase.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
