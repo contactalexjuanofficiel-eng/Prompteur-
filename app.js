@@ -242,7 +242,7 @@ function renderHome() {
     $('#list-setlists').innerHTML = skeleton(3);
     $('#empty-textes').classList.add('hidden'); $('#empty-setlists').classList.add('hidden');
     $('#team-chip').classList.add('hidden');
-    $('#fab').classList.add('hidden'); $('#btn-import').classList.add('hidden');
+    $('#fab').classList.add('hidden'); $('#btn-import').style.visibility = 'hidden';
     return;
   }
   const edit = canEdit();
@@ -251,7 +251,7 @@ function renderHome() {
   chip.classList.toggle('hidden', !session || !t);
   if (session && t) chip.innerHTML = ic('users') + esc(t.nom) + (t.role === 'admin' ? ' · admin' : '');
   $('#fab').classList.toggle('hidden', !edit);
-  $('#btn-import').classList.toggle('hidden', !edit);
+  $('#btn-import').style.visibility = ''; $('#btn-import').classList.toggle('hidden', !edit);
 
   const q = $('#search').value.trim().toLowerCase();
   const textes = liveTextes()
@@ -310,7 +310,7 @@ function openEdit(id) {
   const t = id ? db.textes[id] : null;
   const edit = canEdit();
   $('#edit-titre').value = t ? t.titre : '';
-  // les notes « // » sont réservées aux admins : un membre ne les voit pas
+  // les notes « // » sont réservées aux admins : un membre ne les voit pas
   $('#edit-contenu').value = t ? (edit ? t.contenu : t.contenu.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n')) : '';
   $('#edit-titre').readOnly = $('#edit-contenu').readOnly = $('#edit-duree').readOnly = !edit;
   $('#edit-duree').value = t && t.reglages && t.reglages.duree ? fmtTime(t.reglages.duree) : '';
@@ -327,13 +327,13 @@ function updateStats() {
   const words = (c.match(/\S+/g) || []).length;
   $('#edit-stats').textContent = `${words} mot${words > 1 ? 's' : ''}`;
 }
-// « 3:40 », « 3m40 », « 220 » (secondes) → secondes
+// « 3:40 », « 3m40 », « 220 » (secondes) → secondes
 function parseDuree(v) {
   v = (v || '').trim();
   if (!v) return 0;
   const m = v.match(/^(\d{1,3})\s*[:.hm'’ ]\s*(\d{1,2})\s*s?$/i);
   if (m) return +m[1] * 60 + +m[2];
-  if (/^\d+$/.test(v)) return +v >= 20 ? +v : +v * 60;   // « 4 » = 4 minutes, « 220 » = 220 s
+  if (/^\d+$/.test(v)) return +v >= 20 ? +v : +v * 60;   // « 4 » = 4 minutes, « 220 » = 220 s
   return 0;
 }
 function flushEdit() {
@@ -398,7 +398,7 @@ $('#edit-history').onclick = async () => {
       const apercu = v.contenu.length > 600 ? v.contenu.slice(0, 600) + '\n…' : v.contenu;
       const ok = await modal({
         title: 'Restaurer cette version ?', icon: 'clock',
-        message: `« ${v.titre || 'Sans titre'} » du ${quand}\n\n${apercu || '(texte vide)'}`,
+        message: `« ${v.titre || 'Sans titre'} » du ${quand}\n\n${apercu || '(texte vide)'}`,
         buttons: [{ label: 'Restaurer cette version', value: true }, { label: 'Annuler', value: false, style: 'ghost' }]
       });
       if (!ok) return;
@@ -418,7 +418,7 @@ $('#hist-sheet').addEventListener('click', (e) => { if (e.target.id === 'hist-sh
 $('#edit-delete').addEventListener('click', async () => {
   const t = editId && db.textes[editId];
   if (!t || !canEdit()) return;
-  if (!await confirmModal('Supprimer ce texte ?', `« ${t.titre || 'Sans titre'} » sera supprimé pour toute l'équipe.`, 'Supprimer', { danger: true })) return;
+  if (!await confirmModal('Supprimer ce texte ?', `« ${t.titre || 'Sans titre'} » sera supprimé pour toute l'équipe.`, 'Supprimer', { danger: true })) return;
   t.supprime = true; touchTexte(t); editId = null; back();
 });
 $('#edit-play').addEventListener('click', () => {
@@ -431,7 +431,7 @@ $('#edit-play').addEventListener('click', () => {
 const baseName = (n) => n.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
 const SEP_RE = /^\s*-{3,}\s*$/m;
 
-// « Titre\ntexte\n---\nTitre 2\ntexte… » → [{titre, contenu}]
+// « Titre\ntexte\n---\nTitre 2\ntexte… » → [{titre, contenu}]
 function splitTexts(raw, fallbackTitle) {
   const txt = (raw || '').replace(/\r\n?/g, '\n');
   if (!SEP_RE.test(txt) && fallbackTitle) return txt.trim() ? [{ titre: fallbackTitle, contenu: txt.trim() }] : [];
@@ -617,7 +617,7 @@ $('#sl-nom').addEventListener('input', () => {
 $('#sl-delete').addEventListener('click', async () => {
   const s = db.setlists[slId];
   if (!canEdit()) return;
-  if (!await confirmModal('Supprimer cette setlist ?', `« ${s.nom || 'Setlist sans nom'} » sera supprimée. Les textes qu'elle contient sont conservés.`, 'Supprimer', { danger: true })) return;
+  if (!await confirmModal('Supprimer cette setlist ?', `« ${s.nom || 'Setlist sans nom'} » sera supprimée. Les textes qu'elle contient sont conservés.`, 'Supprimer', { danger: true })) return;
   s.supprime = true; touchSetlist(s); back();
 });
 $('#sl-play').addEventListener('click', () => {
@@ -727,7 +727,7 @@ function renderLine(line, o) {
   return { html: `<span class="ln has-ch">${html}</span>`, words, empty: false };
 }
 
-// Texte complet → lignes. « # Refrain » = section, « // note » = note visible des admins seulement.
+// Texte complet → lignes. « # Refrain » = section, « // note » = note visible des admins seulement.
 function parseText(s, o) {
   const out = [];
   for (const line of (s || '').split('\n')) {
@@ -802,7 +802,7 @@ function setPos(p) {
   updateMeta();
 }
 
-// Mode « une ligne à la fois » : ligne précédente, section, ligne en cours (grande), ligne suivante.
+// Mode « une ligne à la fois » : ligne précédente, section, ligne en cours (grande), ligne suivante.
 function setLine(i) {
   const n = P.steps.length;
   P.li = clamp(i, 0, Math.max(0, n - 1));
@@ -1222,7 +1222,7 @@ function renderSettings() {
   const t = team.current();
   $('#s-remote-status').textContent = !session || !t
     ? 'Connecte-toi à une équipe pour piloter ce prompteur depuis un autre téléphone.'
-    : TC.ready ? `Visible dans la télécommande de l'équipe « ${t.nom} ».`
+    : TC.ready ? `Visible dans la télécommande de l'équipe « ${t.nom} ».`
     : 'Connexion à l\'équipe en cours…';
 }
 for (const [k, id] of Object.entries(sliders)) {
@@ -1474,7 +1474,7 @@ function frErr(e) {
   const m = (e && e.message) || String(e);
   if (/Invalid login/i.test(m)) return `Email ou mot de passe incorrect. Vérifie bien l'adresse : ${($('#acc-email').value || '').trim()}`;
   if (/not confirmed/i.test(m)) return 'Confirme d\'abord ton email (regarde ta boîte mail), puis reconnecte-toi.';
-  if (/already registered/i.test(m)) return 'Ce compte existe déjà : utilise « Se connecter ».';
+  if (/already registered/i.test(m)) return 'Ce compte existe déjà : utilise « Se connecter ».';
   if (/Code invalide/i.test(m)) return 'Code d\'invitation inconnu. Vérifie-le auprès de ton admin.';
   if (/au moins un admin/i.test(m)) return 'Une équipe doit garder au moins un admin. Nomme d\'abord quelqu\'un d\'autre admin.';
   if (/fetch|network/i.test(m)) return 'Pas de connexion internet.';
@@ -1531,7 +1531,7 @@ $('#acc-out').addEventListener('submit', (e) => {
 $('#acc-reset').onclick = (e) => {
   if (!sb) return accMsg('La sauvegarde en ligne n\'est pas configurée.', 'error');
   const email = $('#acc-email').value.trim();
-  if (!email) { $('#acc-email').focus(); return accMsg('Entre ton email ci-dessus, puis touche à nouveau « Mot de passe oublié ? ».', 'info'); }
+  if (!email) { $('#acc-email').focus(); return accMsg('Entre ton email ci-dessus, puis touche à nouveau « Mot de passe oublié ? ».', 'info'); }
   busy(e.currentTarget, async () => {
     const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
     accMsg(error ? frErr(error) : `Si un compte existe pour ${email}, un email vient d'être envoyé. Rien reçu ? Vérifie l'adresse et regarde dans les spams.`, error ? 'error' : 'success');
@@ -1574,7 +1574,7 @@ $('#team-name').addEventListener('change', async (e) => {
 $('#team-share').onclick = async () => {
   const t = team.current(); if (!t) return;
   const url = inviteUrl(t.code_invitation);
-  const text = `Rejoins l'équipe « ${t.nom} » sur Prompteur. Ouvre ce lien (code d'invitation : ${t.code_invitation}) :`;
+  const text = `Rejoins l'équipe « ${t.nom} » sur Prompteur. Ouvre ce lien (code d'invitation : ${t.code_invitation}) :`;
   if (navigator.share) {
     try { await navigator.share({ title: 'Prompteur', text, url }); return; }
     catch (e) { if (e && e.name === 'AbortError') return; }
@@ -1601,8 +1601,8 @@ async function joinWithCode(code) {
   $('#join-code').value = '';
   await loadTeams(); await selectTeam(data);
   const nom = (team.current() || {}).nom || '';
-  accMsg(`Tu as rejoint l'équipe « ${nom} ».`);
-  toast(`Bienvenue dans l'équipe « ${nom} »`);
+  accMsg(`Tu as rejoint l'équipe « ${nom} ».`);
+  toast(`Bienvenue dans l'équipe « ${nom} »`);
   return true;
 }
 $('#join-btn').onclick = (e) => {
@@ -1640,7 +1640,7 @@ async function handleInvite() {
     if (!session) {
       // pas encore connecté : le code est gardé et l'équipe sera rejointe après la connexion
       openAccount();
-      const v = await modal({ title: `Rejoindre « ${nom} »`, icon: 'users',
+      const v = await modal({ title: `Rejoindre « ${nom} »`, icon: 'users',
         message: 'Connecte-toi ou crée ton compte : tu rejoindras l\'équipe automatiquement juste après.',
         buttons: [{ label: 'Continuer', value: 'go' }, { label: 'Annuler l\'invitation', value: 'cancel', style: 'ghost' }] });
       if (v === 'cancel') store.set('pr_invite', null);
@@ -1652,10 +1652,10 @@ async function handleInvite() {
     store.set('pr_invite', null);
     if (deja) {
       if (deja.id !== team.id) await selectTeam(deja.id);
-      toast(`Tu fais déjà partie de « ${deja.nom} »`);
+      toast(`Tu fais déjà partie de « ${deja.nom} »`);
       return;
     }
-    const ok = await modal({ title: `Rejoindre « ${nom} » ?`, icon: 'users',
+    const ok = await modal({ title: `Rejoindre « ${nom} » ?`, icon: 'users',
       message: `Tu es connecté avec ${session.user.email}. Tu pourras lire les textes de l'équipe, lancer le prompteur et utiliser la télécommande.`,
       buttons: [{ label: 'Rejoindre l\'équipe', value: true }, { label: 'Plus tard', value: false, style: 'ghost' }] });
     if (ok) await joinWithCode(code);
@@ -1671,12 +1671,12 @@ $('#team-create').onclick = async (e) => {
     const { data, error } = await sb.rpc('prompteur_creer_equipe', { p_nom: nom });
     if (error) return accMsg(frErr(error));
     await loadTeams(); await selectTeam(data);
-    accMsg(`Équipe « ${nom} » créée. Tu en es l'admin.`);
+    accMsg(`Équipe « ${nom} » créée. Tu en es l'admin.`);
   });
 };
 $('#team-leave').onclick = async () => {
   const t = team.current(); if (!t) return;
-  if (!await confirmModal('Quitter l\'équipe ?', `Tu n'auras plus accès aux textes de « ${t.nom} ». Il faudra un nouveau code pour revenir.`, 'Quitter l\'équipe', { danger: true, icon: 'logout' })) return;
+  if (!await confirmModal('Quitter l\'équipe ?', `Tu n'auras plus accès aux textes de « ${t.nom} ». Il faudra un nouveau code pour revenir.`, 'Quitter l\'équipe', { danger: true, icon: 'logout' })) return;
   const { error } = await sb.from('prompteur_membres').delete().eq('equipe_id', t.id).eq('user_id', session.user.id);
   if (error) return accMsg(frErr(error));
   team.id = null; await loadTeams(); await selectTeam(team.id);
@@ -1860,9 +1860,9 @@ function showBy(c) {
   clearTimeout(byTimer); byTimer = setTimeout(() => el.classList.add('hidden'), 2200);
 }
 
-// Chaque appareil connecté s'annonce à l'équipe par un message « state » régulier (toutes les
+// Chaque appareil connecté s'annonce à l'équipe par un message « state » régulier (toutes les
 // 2,5 s, et à chaque changement) : il apparaît dans la télécommande et peut recevoir un texte.
-// On n'utilise pas la « présence » Supabase, trop limitée en débit : elle coupait l'appareil.
+// On n'utilise pas la « présence » Supabase, trop limitée en débit : elle coupait l'appareil.
 const ONLINE_MS = 9000;
 function trackPresence() { sendState(); }
 function untrackPresence() { sendState(); }
@@ -1969,12 +1969,12 @@ function renderRemote() {
     $('#rc-devices').innerHTML = ''; $('#rc-none').classList.add('hidden');
     return;
   }
-  // une coupure passagère ne fait pas perdre l'appareil choisi : on affiche « reconnexion »
+  // une coupure passagère ne fait pas perdre l'appareil choisi : on affiche « reconnexion »
   const lost = RC.target && (!teamChannelOk() || Date.now() - RC.lastSeen > ONLINE_MS);
   if (!RC.target) {
     $('#rc-pad').classList.add('hidden'); $('#rc-list-view').classList.remove('hidden');
     $('#rc-intro').textContent = TC.ready
-      ? `Appareils de l'équipe « ${t ? t.nom : ''} ». Choisis celui à piloter.`
+      ? `Appareils de l'équipe « ${t ? t.nom : ''} ». Choisis celui à piloter.`
       : 'Connexion à l\'équipe…';
     const ul = $('#rc-devices'); ul.innerHTML = '';
     // les prompteurs ouverts d'abord
@@ -2076,7 +2076,7 @@ Touche l'écran pour lancer ou mettre en pause.
 Glisse le doigt pour avancer ou reculer.
 
 # Mise en forme
-Commence une ligne par # pour faire un titre de section, comme « Refrain ».
+Commence une ligne par # pour faire un titre de section, comme « Refrain ».
 [Les indications entre crochets apparaissent en couleur]
 
 # En concert
@@ -2129,15 +2129,15 @@ Tu es prêt pour la scène.
 function stageChecklist() {
   const android = /Android/.test(navigator.userAgent);
   const steps = android ? [
-    '1. Ne pas déranger : glisse deux fois depuis le haut de l\'écran et touche « Ne pas déranger ».',
+    '1. Ne pas déranger : glisse deux fois depuis le haut de l\'écran et touche « Ne pas déranger ».',
     '2. Mise en veille : Paramètres > Affichage > Mise en veille de l\'écran > le plus long possible.',
     '3. Luminosité : au maximum, et désactive la luminosité adaptative si l\'écran baisse tout seul.',
     '4. Batterie : branche le téléphone ou vérifie qu\'il est bien chargé. Désactive l\'économiseur de batterie.',
     '5. Laisse Prompteur ouvert au premier plan. La télécommande a besoin d\'internet : pas de mode Avion si tu l\'utilises.'
   ] : [
-    '1. Ne pas déranger : glisse depuis le coin en haut à droite de l\'écran, touche « Concentration » puis « Ne pas déranger ».',
+    '1. Ne pas déranger : glisse depuis le coin en haut à droite de l\'écran, touche « Concentration » puis « Ne pas déranger ».',
     '2. Verrouillage automatique : Réglages > Luminosité et affichage > Verrouillage automatique > Jamais.',
-    '3. Luminosité : au maximum dans le même menu. Si elle baisse toute seule : Réglages > Accessibilité > Affichage et taille du texte > désactive « Luminosité automatique ».',
+    '3. Luminosité : au maximum dans le même menu. Si elle baisse toute seule : Réglages > Accessibilité > Affichage et taille du texte > désactive « Luminosité automatique ».',
     '4. Batterie : branche le téléphone ou vérifie qu\'il est bien chargé. Désactive le mode Économie d\'énergie (il peut couper la télécommande).',
     '5. Laisse Prompteur ouvert au premier plan. La télécommande a besoin d\'internet : pas de mode Avion si tu l\'utilises.'
   ];
@@ -2151,7 +2151,7 @@ $('#s-stage').onclick = () => stageChecklist();
 $('#help-stage').onclick = () => stageChecklist();
 
 /* --- retours des testeurs --- */
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v25';
 function deviceLabel(ua) {
   const ios = ua.match(/OS (\d+)_(\d+)/);
   if (/iPhone/.test(ua)) return 'iPhone' + (ios ? ` iOS ${ios[1]}.${ios[2]}` : '');
@@ -2258,7 +2258,7 @@ $('#wl-login').onclick = () => endWelcome('login');
 $('#wl-skip').onclick = () => endWelcome('skip');
 
 /* ================= MÉMOIRE DE L'APPAREIL ================= */
-// Sur iPhone, Safari en navigation privée ou avec « Bloquer tous les cookies » n'enregistre rien :
+// Sur iPhone, Safari en navigation privée ou avec « Bloquer tous les cookies » n'enregistre rien :
 // la connexion et les textes sont perdus au rechargement. On le détecte et on explique quoi faire.
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const isInstalled = navigator.standalone === true ||
@@ -2270,7 +2270,7 @@ function storageWorks() {
 if (!storageWorks()) {
   setTimeout(() => modal({
     title: 'Ton navigateur n\'enregistre rien', icon: 'x', danger: true,
-    message: 'Tu devras te reconnecter à chaque fois et tes textes ne seront pas gardés. Sur iPhone : quitte la navigation privée, ou va dans Réglages > Apps > Safari et désactive « Bloquer tous les cookies ». Puis installe l\'appli sur l\'écran d\'accueil.',
+    message: 'Tu devras te reconnecter à chaque fois et tes textes ne seront pas gardés. Sur iPhone : quitte la navigation privée, ou va dans Réglages > Apps > Safari et désactive « Bloquer tous les cookies ». Puis installe l\'appli sur l\'écran d\'accueil.',
     buttons: [{ label: 'J\'ai compris', value: true }]
   }), 900);
 }
@@ -2285,9 +2285,9 @@ function installHelp() {
     title: 'Pour rester connecté', icon: 'share',
     message: 'Tu utilises Prompteur dans Safari : il peut t\'oublier, surtout en navigation privée.\n\n'
       + '1. Touche Partager (le carré avec une flèche) en bas de Safari.\n'
-      + '2. Choisis « Sur l\'écran d\'accueil » puis Ajouter. Attention : « Ajouter un signet » ou « Favoris » ne suffit pas.\n'
+      + '2. Choisis « Sur l\'écran d\'accueil » puis Ajouter. Attention : « Ajouter un signet » ou « Favoris » ne suffit pas.\n'
       + '3. Ouvre Prompteur depuis la nouvelle icône et connecte-toi une fois dedans.\n\n'
-      + 'Si l\'onglet Safari est sombre avec « Privé », quitte d\'abord la navigation privée.',
+      + 'Si l\'onglet Safari est sombre avec « Privé », quitte d\'abord la navigation privée.',
     buttons: [{ label: 'Compris', value: true }]
   });
 }

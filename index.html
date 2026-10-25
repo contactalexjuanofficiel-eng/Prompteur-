@@ -95,7 +95,7 @@
   <div id="sync-banner" class="sync-banner hidden"></div>
   <div id="install-banner" class="install-banner hidden">
     <svg class="ic"><use href="#i-share"/></svg>
-    <div class="grow"><b>Installe l'appli pour rester connecté</b><div class="small">Partager puis « Sur l'écran d'accueil », et ouvre-la ensuite depuis l'icône.</div></div>
+    <div class="grow"><b>Installe l'appli pour rester connecté</b><div class="small">Partager puis «&nbsp;Sur l'écran d'accueil&nbsp;», et ouvre-la ensuite depuis l'icône.</div></div>
     <button class="icon-btn" id="install-close" aria-label="Masquer"><svg class="ic"><use href="#i-x"/></svg></button>
   </div>
 
@@ -124,7 +124,7 @@
 <!-- ============ ÉDITEUR DE TEXTE ============ -->
 <section id="v-edit" class="view hidden">
   <header class="topbar">
-    <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
+    <button class="link-btn" data-back aria-label="Retour"><svg class="ic"><use href="#i-back"/></svg><span class="lbl">Retour</span></button>
     <div class="topbar-actions">
       <button class="link-btn hidden" id="edit-history" aria-label="Historique"><svg class="ic"><use href="#i-clock"/></svg><span class="lbl">Historique</span></button>
       <button class="link-btn danger" id="edit-delete" aria-label="Supprimer"><svg class="ic"><use href="#i-trash"/></svg><span class="lbl">Supprimer</span></button>
@@ -159,9 +159,9 @@ Ligne vide         → espace"></textarea>
 <!-- ============ ÉDITEUR DE SETLIST ============ -->
 <section id="v-setlist" class="view hidden">
   <header class="topbar">
-    <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
+    <button class="link-btn" data-back aria-label="Retour"><svg class="ic"><use href="#i-back"/></svg><span class="lbl">Retour</span></button>
     <div class="topbar-actions">
-      <button class="link-btn danger" id="sl-delete"><svg class="ic"><use href="#i-trash"/></svg>Supprimer</button>
+      <button class="link-btn danger" id="sl-delete" aria-label="Supprimer"><svg class="ic"><use href="#i-trash"/></svg><span class="lbl">Supprimer</span></button>
     </div>
   </header>
   <div class="edit-body">
@@ -183,8 +183,8 @@ Ligne vide         → espace"></textarea>
       <button class="link-btn" id="imp-close">Fermer</button>
     </div>
     <div class="imp-body">
-      <label class="secondary file-btn block"><svg class="ic"><use href="#i-file"/></svg>Choisir des fichiers (.txt, Word, PDF)<input type="file" id="imp-files" multiple accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
-      <p class="muted small">Un fichier = un texte, le nom du fichier devient le titre. Tu peux en choisir plusieurs d'un coup.</p>
+      <label class="secondary file-btn block"><svg class="ic"><use href="#i-file"/></svg>Choisir des fichiers<input type="file" id="imp-files" multiple accept=".txt,.md,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
+      <p class="muted small">Formats : .txt, Word, PDF. Un fichier = un texte, le nom du fichier devient le titre. Tu peux en choisir plusieurs d'un coup.</p>
       <div class="imp-or">ou</div>
       <textarea id="imp-paste" placeholder="Colle ici plusieurs chansons, séparées par une ligne ---
 
@@ -229,7 +229,7 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
 <!-- ============ COMPTE & ÉQUIPE ============ -->
 <section id="v-account" class="view hidden">
   <header class="topbar">
-    <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
+    <button class="link-btn" data-back aria-label="Retour"><svg class="ic"><use href="#i-back"/></svg><span class="lbl">Retour</span></button>
     <h2>Compte et équipe</h2>
     <span class="spacer"></span>
   </header>
@@ -319,14 +319,14 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
     <button class="secondary" id="acc-feedback"><svg class="ic"><use href="#i-message"/></svg>Signaler un souci ou proposer une idée</button>
     <hr>
     <h3>Installer sur iPhone / iPad</h3>
-    <p class="muted">Dans Safari : bouton <b>Partager</b> <svg class="ic inline"><use href="#i-share"/></svg> puis <b>« Sur l'écran d'accueil »</b>. L'appli s'ouvre alors en plein écran et fonctionne même sans réseau.</p>
+    <p class="muted">Dans Safari : bouton <b>Partager</b> <svg class="ic inline"><use href="#i-share"/></svg> puis <b>«&nbsp;Sur l'écran d'accueil&nbsp;»</b>. L'appli s'ouvre alors en plein écran et fonctionne même sans réseau.</p>
   </div>
 </section>
 
 <!-- ============ MODE D'EMPLOI ============ -->
 <section id="v-help" class="view hidden">
   <header class="topbar">
-    <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
+    <button class="link-btn" data-back aria-label="Retour"><svg class="ic"><use href="#i-back"/></svg><span class="lbl">Retour</span></button>
     <h2>Mode d'emploi</h2>
     <span class="spacer"></span>
   </header>
@@ -335,16 +335,16 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
 
     <details open>
       <summary><span class="step">1</span>Installer l'appli</summary>
-      <p><b>iPhone / iPad :</b> ouvre le lien dans <b>Safari</b>, touche <b>Partager</b> <svg class="ic inline"><use href="#i-share"/></svg> puis <b>« Sur l'écran d'accueil »</b> et <b>Ajouter</b>.</p>
-      <p><b>Android :</b> ouvre le lien dans <b>Chrome</b>, menu <b>⋮</b> puis <b>« Installer l'application »</b>.</p>
+      <p><b>iPhone / iPad :</b> ouvre le lien dans <b>Safari</b>, touche <b>Partager</b> <svg class="ic inline"><use href="#i-share"/></svg> puis <b>«&nbsp;Sur l'écran d'accueil&nbsp;»</b> et <b>Ajouter</b>.</p>
+      <p><b>Android :</b> ouvre le lien dans <b>Chrome</b>, menu <b>⋮</b> puis <b>«&nbsp;Installer l'application&nbsp;»</b>.</p>
       <p>Lance ensuite toujours Prompteur <b>depuis son icône</b> : il s'ouvre en plein écran et fonctionne hors ligne.</p>
     </details>
 
     <details>
       <summary><span class="step">2</span>Créer son compte</summary>
       <p>Touche <svg class="ic inline"><use href="#i-user"/></svg> en haut à droite, entre ton email et un mot de passe, puis <b>Créer un compte</b>. Clique sur le lien reçu par email (une page d'erreur peut s'afficher, c'est normal), reviens dans l'appli et touche <b>Se connecter</b>.</p>
-      <p>Tu ne te connectes qu'<b>une seule fois</b>. Accepte « Enregistrer le mot de passe » quand l'iPhone le propose.</p>
-      <p class="tip">Sur iPhone, Safari et l'appli installée ne partagent pas la connexion : connecte-toi bien <b>dans l'appli installée</b>. N'utilise pas la <b>navigation privée</b>, et vérifie que « Bloquer tous les cookies » est désactivé dans Réglages &gt; Apps &gt; Safari : sinon il faut se reconnecter à chaque fois.</p>
+      <p>Tu ne te connectes qu'<b>une seule fois</b>. Accepte «&nbsp;Enregistrer le mot de passe&nbsp;» quand l'iPhone le propose.</p>
+      <p class="tip">Sur iPhone, Safari et l'appli installée ne partagent pas la connexion : connecte-toi bien <b>dans l'appli installée</b>. N'utilise pas la <b>navigation privée</b>, et vérifie que «&nbsp;Bloquer tous les cookies&nbsp;» est désactivé dans Réglages &gt; Apps &gt; Safari : sinon il faut se reconnecter à chaque fois.</p>
       <p>Sans compte, l'appli marche aussi, mais tout reste sur ton appareil (pas d'équipe ni de télécommande).</p>
     </details>
 
@@ -381,8 +381,8 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
 
     <details>
       <summary><span class="step">5</span>Faire une setlist</summary>
-      <p>Onglet <b>Setlists</b>, touche <b>+</b>, donne un nom (ex : « Mariage Julie &amp; Tom »), puis <b>Ajouter des textes</b>. Range les morceaux avec <svg class="ic inline"><use href="#i-up"/></svg> <svg class="ic inline"><use href="#i-down"/></svg>.</p>
-      <p><b>Lancer la setlist</b> enchaîne les morceaux. Active « Enchaîner automatiquement » dans les réglages pour passer au suivant tout seul.</p>
+      <p>Onglet <b>Setlists</b>, touche <b>+</b>, donne un nom (ex : «&nbsp;Mariage Julie &amp; Tom&nbsp;»), puis <b>Ajouter des textes</b>. Range les morceaux avec <svg class="ic inline"><use href="#i-up"/></svg> <svg class="ic inline"><use href="#i-down"/></svg>.</p>
+      <p><b>Lancer la setlist</b> enchaîne les morceaux. Active «&nbsp;Enchaîner automatiquement&nbsp;» dans les réglages pour passer au suivant tout seul.</p>
     </details>
 
     <details>
@@ -392,7 +392,7 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
         <li><b>Admin</b> : crée, modifie et supprime les textes et setlists, gère les membres.</li>
         <li><b>Membre</b> : voit tout, lance le prompteur et la télécommande, mais ne modifie rien.</li>
       </ul>
-      <p><b>Inviter quelqu'un :</b> touche <svg class="ic inline"><use href="#i-share"/></svg> à côté du code d'invitation et envoie le lien. En l'ouvrant, la personne rejoint l'équipe en un clic, ou elle entre le code dans « Autres équipes ».</p>
+      <p><b>Inviter quelqu'un :</b> touche <svg class="ic inline"><use href="#i-share"/></svg> à côté du code d'invitation et envoie le lien. En l'ouvrant, la personne rejoint l'équipe en un clic, ou elle entre le code dans «&nbsp;Autres équipes&nbsp;».</p>
     </details>
 
     <details>
@@ -443,7 +443,7 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
 <!-- ============ TÉLÉCOMMANDE ============ -->
 <section id="v-remote" class="view hidden">
   <header class="topbar">
-    <button class="link-btn" data-back><svg class="ic"><use href="#i-back"/></svg>Retour</button>
+    <button class="link-btn" data-back aria-label="Retour"><svg class="ic"><use href="#i-back"/></svg><span class="lbl">Retour</span></button>
     <h2>Télécommande</h2>
     <span class="spacer"></span>
   </header>
@@ -520,13 +520,15 @@ La 1re ligne de chaque bloc devient le titre."></textarea>
 
   <div id="p-ui" class="p-ui">
     <div class="p-top">
-      <button class="p-btn" id="p-close" aria-label="Fermer"><svg class="ic"><use href="#i-x"/></svg></button>
+      <div class="p-side"><button class="p-btn" id="p-close" aria-label="Fermer"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="p-info">
         <div id="p-title"></div>
         <div id="p-meta"></div>
       </div>
-      <button class="p-btn hidden" id="p-sec-btn" aria-label="Aller à une section"><svg class="ic"><use href="#i-sections"/></svg></button>
-      <button class="p-btn" id="p-settings-btn" aria-label="Réglages"><svg class="ic"><use href="#i-settings"/></svg></button>
+      <div class="p-side end">
+        <button class="p-btn hidden" id="p-sec-btn" aria-label="Aller à une section"><svg class="ic"><use href="#i-sections"/></svg></button>
+        <button class="p-btn" id="p-settings-btn" aria-label="Réglages"><svg class="ic"><use href="#i-settings"/></svg></button>
+      </div>
     </div>
     <div class="p-bottom">
       <div class="progress"><div id="p-prog"></div></div>
